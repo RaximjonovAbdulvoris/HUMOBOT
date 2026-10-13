@@ -1,0 +1,87 @@
+"""Isolated @testthumo_bot runner; never uses production routes or state."""
+import asyncio
+import json
+import logging
+import os
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+STATE = ROOT / '.test-bot-state'
+
+
+def configure():
+    envfile = ROOT / '.env.test'
+    values = {}
+    if envfile.exists():
+        for line in envfile.read_text().splitlines():
+            if line.strip() and not line.lstrip().startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                values[key.strip()] = value.strip().strip('\"\'')
+    token = values.get('TELEGRAM_BOT_TOKEN', '')
+    if token.split(':')[0] != '8845908442':
+        raise ValueError('Only the authorized test bot token is accepted in .env.test')
+    os.environ.update({
+        'TELEGRAM_BOT_TOKEN': token,
+        'CODECRAFT_API_KEY': values.get('CODECRAFT_API_KEY', ''),
+        'CODECRAFT_VISION_MODEL': values.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna'),
+        'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
+        'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': '',
+        'TASHKENT_DRIVER_GROUP_1': '-5258426588', 'TASHKENT_DRIVER_GROUP_2': '-5468071353',
+        'TASHKENT_BRAND_GROUP': '-5422883968', 'TASHKENT_SPECTRE_GROUP': '-5243428930',
+        'NAMANGAN_SPECTRE_GROUP': '-5243428930', 'TASHKENT_ARCHIVE_GROUP': '',
+        'PERSIST_DIR': str(STATE), 'SUBSCRIPTION_CHANNEL_ID': '@WB_HUMO_TAXI',
+    })
+    STATE.mkdir(mode=0o700, exist_ok=True)
+    # Local routing overrides take precedence, so explicitly isolate these too.
+    routes = {key: os.environ[key] for key in (
+        'TASHKENT_DRIVER_GROUP_1', 'TASHKENT_DRIVER_GROUP_2', 'TASHKENT_BRAND_GROUP',
+        'TASHKENT_SPECTRE_GROUP', 'NAMANGAN_SPECTRE_GROUP')}
+    (STATE / 'bot_routes.json').write_text(json.dumps(routes))
+
+
+async def preflight():
+    from telegram import Bot
+    from telegram.request import HTTPXRequest
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30, write_timeout=30, connection_pool_size=8)
+    async with Bot(os.environ['TELEGRAM_BOT_TOKEN'], request=request) as bot:
+        me = bot.bot
+        if me.username.lower() != 'testthumo_bot':
+            raise ValueError('Unexpected test bot identity')
+        chats = (-5258426588, -5468071353, -5422883968, -5243428930)
+        members = await asyncio.gather(*(bot.get_chat_member(chat, me.id) for chat in chats))
+        for chat, member in zip(chats, members):
+            if member.status != 'administrator' or not member.can_delete_messages:
+                raise ValueError(f'Test bot needs admin/delete rights in {chat}')
+        webhook = await bot.get_webhook_info()
+        if webhook.url:
+            raise ValueError('Test bot has an existing webhook; stop that instance first')
+        print('Test bot identity and four groups verified.', flush=True)
+
+
+def main():
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    try:
+        configure()
+        asyncio.run(asyncio.wait_for(preflight(), timeout=90))
+    except Exception as error:
+        # Never print Telegram exceptions/URLs containing the bot token.
+        print(f'Test bot preflight failed: {type(error).__name__}. Check token, network and group permissions.', flush=True)
+        return 1
+    if '--check' in sys.argv:
+        return 0
+    # Subscription checks are disabled only in this identity-checked test runner.
+    # This allows testing without adding the test bot to production channels.
+    import bot.subscription as subscription
+    subscription.DEFAULT_REQUIRED_CHATS = ()
+    subscription.NAMANGAN_REQUIRED_CHATS = ()
+    import bot.main as application
+    print('TEST MODE: four test groups; no archive; no subscription gate.', flush=True)
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    application.main()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
