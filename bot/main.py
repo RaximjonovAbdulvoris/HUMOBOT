@@ -108,10 +108,10 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     if isinstance(err, (NetworkError, TimedOut)):
-        logger.warning("Network/Timeout while polling: %s", err)
+        logger.warning("Network/Timeout while polling (%s)", type(err).__name__)
         return
 
-    logger.error("Unhandled error: %s", err, exc_info=err)
+    logger.error("Unhandled error (%s)", type(err).__name__)
     try:
         if isinstance(update, Update) and update.effective_chat:
             await context.bot.send_message(
@@ -155,7 +155,8 @@ def main() -> None:
 
     import os
     persist_path = os.path.join(os.environ.get("PERSIST_DIR", "."), "bot_persistence.pkl")
-    persistence = PicklePersistence(filepath=persist_path)
+    from bot.secure_persistence import SecurePersistence
+    persistence = SecurePersistence(filepath=persist_path)
 
     app = (
         Application.builder()

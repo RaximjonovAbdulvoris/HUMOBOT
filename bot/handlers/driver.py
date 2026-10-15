@@ -232,7 +232,9 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "⚠️ *Diqqat!*\n\n"
         "Endi sizdan hujjatlaringizning *originalini rasmga olib* jo'natishingiz so'raladi.\n\n"
         "❌ Soliqdan olingan skrinshot QABUL QILINMAYDI!\n\n"
-        "Davom etish uchun pastdagi knopkani bosing.",
+        "Hujjatlardagi ma’lumotlar arizani ko‘rib chiqish uchun operatorlarga va "
+        "avtomatik o‘qish uchun CodeCraft AI xizmatiga yuboriladi. "
+        "Davom etish orqali ushbu ishlov berishga rozilik bildirasiz.",
         parse_mode="Markdown",
         reply_markup=CONTINUE_KB,
     )

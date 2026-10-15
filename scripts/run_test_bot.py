@@ -25,6 +25,7 @@ def configure():
     os.environ.update({
         'TELEGRAM_BOT_TOKEN': token,
         'CODECRAFT_API_KEY': values.get('CODECRAFT_API_KEY', ''),
+        'DOCUMENT_AI_ENABLED': values.get('DOCUMENT_AI_ENABLED', '1'),
         'CODECRAFT_VISION_MODEL': values.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna'),
         'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
         'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),

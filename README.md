@@ -169,3 +169,11 @@ journalctl -u humobot-test -n 30 --no-pager
 
 Set `ARCHIVE_GROUP` before testing Ready. Never run a second polling process
 alongside the systemd service; `--check` only performs read-only checks.
+
+### Document extraction and privacy
+
+The OCR pipeline strips image metadata in memory, corrects EXIF rotation, improves contrast and retries missing fields using overlapping document crops. Output tokens are capped at 8192 per request. This can increase latency and API cost. Conflicting readings remain empty for operator review; never treat AI output as verified identity data. Set `DOCUMENT_AI_ENABLED=0` in the environment (or `.env.test` for the test runner) and restart to disable external document extraction.
+
+State is encrypted using authenticated Fernet encryption. On startup, trusted legacy `bot_persistence.pkl` state is migrated in place; the sibling `bot_persistence.key` is generated with mode 0600. Preserve this key in a separate secure backup: losing it makes existing state unreadable. Do not restore an older unencrypted-only release onto encrypted state. Do not upload state or keys to Git. Encryption does not protect against root access or theft of both state and key. Telegram messages and existing backups are not encrypted by this feature.
+
+CodeCraft forwards document content to the upstream provider; provider retention and possible error-log fragments still apply. Restrict operator/archive groups to authorized staff, enable Telegram 2FA and protected content, revoke unused invite links, and agree a document deletion schedule. Rotate any credentials previously shared in chat. No zero-leak guarantee is possible with external services.

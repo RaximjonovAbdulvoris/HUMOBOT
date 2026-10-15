@@ -68,3 +68,6 @@ venv/
 # Durable counters and generated instruction cards
 *.sqlite3
 visual_templates/
+
+*.key
+.state-*

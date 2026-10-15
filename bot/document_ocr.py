@@ -4,6 +4,8 @@ import base64
 from datetime import datetime
 from html import escape
 import json
+from io import BytesIO
+from PIL import Image, ImageOps, ImageFilter
 import logging
 import os
 import re
@@ -73,6 +75,24 @@ def normalize(raw):
     return result
 
 
+def prepare_images(raw):
+    """Strip metadata and create readable views in RAM; never write documents to disk."""
+    with Image.open(BytesIO(raw)) as original:
+        if original.width * original.height > 30_000_000:
+            raise ValueError('Image dimensions too large')
+        image = ImageOps.exif_transpose(original).convert('RGB')
+    image.thumbnail((2600, 2600), Image.Resampling.LANCZOS)
+    image = ImageOps.autocontrast(image, cutoff=0.3)
+    image = image.filter(ImageFilter.UnsharpMask(radius=1.2, percent=110, threshold=3))
+    def encode(view):
+        buffer = BytesIO()
+        view.save(buffer, format='JPEG', quality=92)
+        return base64.b64encode(buffer.getvalue()).decode('ascii')
+    width, height = image.size
+    return [encode(image), encode(image.crop((0, 0, width, int(height * .65)))),
+            encode(image.crop((0, int(height * .35), width, height)))]
+
+
 async def extract_one(client, bot, source, file_id, semaphore, model):
     async with semaphore:
         file = await bot.get_file(file_id)
@@ -81,37 +101,49 @@ async def extract_one(client, bot, source, file_id, semaphore, model):
         image = await file.download_as_bytearray()
         if len(image) > 5_000_000:
             raise ValueError('Image too large')
-        encoded = base64.b64encode(image).decode('ascii')
-        response = await client.post('/v1/chat/completions', json={
-            'model': model, 'stream': False, 'max_tokens': 2048,
-            'response_format': {'type': 'json_object'},
-            'messages': [
-                {'role': 'system', 'content': PROMPT},
-                {'role': 'user', 'content': [
-                    {'type': 'text', 'text': f'Document: {source}. Keys: {", ".join(SOURCES[source])}'},
-                    {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{encoded}'}},
-                ]},
-            ],
-        })
-        response.raise_for_status()
-        choice = response.json()['choices'][0]
-        if choice.get('finish_reason') != 'stop':
-            raise ValueError('Incomplete extraction')
-        values = normalize(json.loads(choice['message']['content']))
-        return {key: values[key] for key in SOURCES[source]}
+        views = await asyncio.to_thread(prepare_images, image)
+        requested = SOURCES[source]
+        async def read(images, fields):
+            content = [{'type': 'text', 'text':
+                f'Document: {source}. Keys: {", ".join(fields)}. '
+                'Images are views of the SAME document. Inspect small print carefully.'}]
+            content.extend({'type': 'image_url', 'image_url': {
+                'url': f'data:image/jpeg;base64,{encoded}', 'detail': 'high'}} for encoded in images)
+            response = await client.post('/v1/chat/completions', json={
+                'model': model, 'stream': False, 'max_tokens': 8192,
+                'response_format': {'type': 'json_object'},
+                'messages': [{'role': 'system', 'content': PROMPT},
+                             {'role': 'user', 'content': content}],
+            })
+            response.raise_for_status()
+            choice = response.json()['choices'][0]
+            if choice.get('finish_reason') != 'stop':
+                raise ValueError('Incomplete extraction')
+            return normalize(json.loads(choice['message']['content']))
+        values = await read(views[:1], requested)
+        missing = [field for field in requested if not values[field]]
+        if missing:
+            try:
+                review = await read(views[1:], missing)
+                for field in missing:
+                    values[field] = review[field]
+            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                # Preserve the successful first pass; never log provider response bodies.
+                logger.warning('Document detail review unavailable for %s', source)
+        return {field: values[field] for field in requested}
 
 
 async def extract_documents(bot, data):
     key = os.environ.get('CODECRAFT_API_KEY', '').strip()
-    if not key:
+    if not key or os.environ.get('DOCUMENT_AI_ENABLED', '1') != '1':
         return {'status': 'unavailable', 'values': {}, 'failed_sources': []}
     model = os.environ.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna')
     # Fixed trusted origin: credentials and documents must not follow redirects.
-    semaphore = asyncio.Semaphore(3)
+    semaphore = asyncio.Semaphore(2)
     selected = [(source, data[source]) for source in SOURCES if data.get(source)]
     async with httpx.AsyncClient(
         base_url='https://codecraftapi.com', headers={'Authorization': f'Bearer {key}'},
-        timeout=httpx.Timeout(60.0, connect=15.0), follow_redirects=False,
+        timeout=httpx.Timeout(60.0, connect=15.0), follow_redirects=False, trust_env=False,
     ) as client:
         results = await asyncio.gather(*[
             extract_one(client, bot, source, file_id, semaphore, model)
@@ -140,7 +172,7 @@ async def prepare_document_summary(context):
     if '_document_ocr' not in data:
         try:
             data['_document_ocr'] = await asyncio.wait_for(
-                extract_documents(context.bot, data), timeout=150,
+                extract_documents(context.bot, data), timeout=240,
             )
         except Exception as error:
             logger.warning('Document extraction unavailable (%s)', type(error).__name__)
