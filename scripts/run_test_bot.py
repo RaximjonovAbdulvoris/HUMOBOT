@@ -24,9 +24,8 @@ def configure():
         raise ValueError('Only the authorized test bot token is accepted in .env.test')
     os.environ.update({
         'TELEGRAM_BOT_TOKEN': token,
-        'CODECRAFT_API_KEY': values.get('CODECRAFT_API_KEY', ''),
         'DOCUMENT_AI_ENABLED': values.get('DOCUMENT_AI_ENABLED', '1'),
-        'CODECRAFT_VISION_MODEL': values.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna'),
+        'LOCAL_OCR_MODEL': values.get('LOCAL_OCR_MODEL', 'qwen2.5vl:3b'),
         'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
         'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
         'TASHKENT_DRIVER_GROUP_1': '-5258426588', 'TASHKENT_DRIVER_GROUP_2': '-5468071353',
@@ -48,6 +47,11 @@ def configure():
 
 
 async def preflight():
+    from bot.document_ocr import enabled, local_client, local_model, check_local_engine
+    if enabled():
+        async with local_client() as client:
+            await check_local_engine(client, local_model())
+        print('Local OCR model verified; external AI is disabled.', flush=True)
     from telegram import Bot
     from telegram.request import HTTPXRequest
     request = HTTPXRequest(connect_timeout=30, read_timeout=30, write_timeout=30, connection_pool_size=8)
@@ -80,7 +84,7 @@ def main():
         asyncio.run(asyncio.wait_for(preflight(), timeout=90))
     except Exception as error:
         # Never print Telegram exceptions/URLs containing the bot token.
-        print(f'Test bot preflight failed: {type(error).__name__}. Check token, network and group permissions.', flush=True)
+        print(f'Test bot preflight failed: {type(error).__name__}. Check local OCR, token, network and group permissions.', flush=True)
         return 1
     if '--check' in sys.argv:
         return 0

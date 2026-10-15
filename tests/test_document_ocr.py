@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import unittest
@@ -6,106 +7,201 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from bot import document_ocr as ocr
 
+
 class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     def image_bytes():
         from io import BytesIO
         from PIL import Image
         buf = BytesIO()
-        Image.new("RGB", (300, 200), "white").save(buf, format="JPEG")
+        Image.new('RGB', (300, 200), 'white').save(buf, format='JPEG')
         return buf.getvalue()
 
+    @staticmethod
+    def client(handler):
+        return httpx.AsyncClient(base_url=ocr.LOCAL_ORIGIN,
+            transport=httpx.MockTransport(handler), trust_env=False, follow_redirects=False)
+
+    @staticmethod
+    def response(values):
+        return httpx.Response(200, json={'done': True, 'done_reason': 'stop',
+            'message': {'content': json.dumps(values)}})
+
     def test_validates_digits_dates_and_unknown_values(self):
-        values=ocr.normalize({'pinfl':'1234 5678901234','birth_date':'31.02.2000',
-              'license_expiry':'01.12.2030','birth_place':None,'license_number':12345})
-        self.assertEqual(values['pinfl'],'12345678901234')
+        values = ocr.normalize({'pinfl': '1234 5678901234', 'birth_date': '31.02.2000',
+            'license_expiry': '01.12.2030', 'birth_place': None, 'license_number': 12345})
+        self.assertEqual(values['pinfl'], '12345678901234')
         self.assertIsNone(values['birth_date'])
         self.assertIsNone(values['license_number'])
-        self.assertEqual(values['license_expiry'],'01.12.2030')
+        self.assertEqual(values['license_expiry'], '01.12.2030')
 
     def test_html_escaping_and_copyable_values(self):
-        text=ocr.format_summary({'status':'partial','values':{'birth_place':'A < B & C'}})
-        self.assertIn('<code>A &lt; B &amp; C</code>',text)
-        self.assertIn('Aniqlanmadi',text)
-        self.assertIn('asl hujjat',text)
+        text = ocr.format_summary({'status': 'partial', 'values': {'birth_place': 'A < B & C'}})
+        self.assertIn('<code>A &lt; B &amp; C</code>', text)
+        self.assertIn('Aniqlanmadi', text)
+        self.assertIn('asl hujjat', text)
 
-    async def test_missing_key_does_not_download_photos(self):
-        bot=N(get_file=AsyncMock())
-        with patch.dict(os.environ,{'CODECRAFT_API_KEY':''}):
-            result=await ocr.extract_documents(bot,{'passport_front':'file'})
+    async def test_disabled_sends_nothing_even_with_old_api_key(self):
+        bot = N(get_file=AsyncMock())
+        with patch.dict(os.environ, {'CODECRAFT_API_KEY': 'test-only', 'DOCUMENT_AI_ENABLED': '0'}), \
+             patch.object(ocr, 'local_client') as factory:
+            result = await ocr.extract_documents(bot, {'passport_front': 'file'})
         bot.get_file.assert_not_awaited()
-        self.assertEqual(result['status'],'unavailable')
+        factory.assert_not_called()
+        self.assertEqual(result['status'], 'unavailable')
 
-    async def test_conflicting_readings_are_not_guessed(self):
-        bot=N()
-        with patch('bot.document_ocr.httpx.AsyncClient', return_value=AsyncMock()), patch.dict(os.environ,{'CODECRAFT_API_KEY':'test-only'}), patch.object(
-            ocr,'extract_one',AsyncMock(side_effect=[{'pinfl':'12345678901234'},
-                                                   {'pinfl':'12345678901235'}])):
-            result=await ocr.extract_documents(bot,{'passport_front':'a','passport_back':'b'})
-        self.assertIsNone(result['values']['pinfl'])
+    async def test_engine_failure_never_downloads_or_falls_back(self):
+        bot = N(get_file=AsyncMock())
+        client = self.client(lambda request: httpx.Response(503))
+        with patch.object(ocr, 'local_client', return_value=client), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1', 'CODECRAFT_API_KEY': 'test-only'}):
+            result = await ocr.extract_documents(bot, {'passport_front': 'file'})
+        bot.get_file.assert_not_awaited()
+        self.assertEqual(result['status'], 'unavailable')
 
-    async def test_provider_failure_does_not_discard_other_fields(self):
-        with patch('bot.document_ocr.httpx.AsyncClient', return_value=AsyncMock()), patch.dict(os.environ,{'CODECRAFT_API_KEY':'test-only'}), patch.object(
-            ocr,'extract_one',AsyncMock(side_effect=[RuntimeError('no response'),
-                                       {'vehicle_registration':'ABC1234567'}])):
-            result=await ocr.extract_documents(N(),{'passport_front':'a','tech_front':'b'})
-        self.assertEqual(result['values']['vehicle_registration'],'ABC1234567')
-        self.assertEqual(result['failed_sources'],['passport_front'])
+    async def test_model_must_be_installed_local_vision(self):
+        for metadata in ({'capabilities': ['completion']},
+                         {'capabilities': ['vision'], 'remote_model': 'some-cloud-model'}):
+            async with self.client(lambda request: httpx.Response(200, json=metadata)) as client:
+                with self.assertRaises(ValueError):
+                    await ocr.check_local_engine(client, 'qwen2.5vl:3b')
+        with patch.dict(os.environ, {'LOCAL_OCR_MODEL': 'model:cloud'}):
+            with self.assertRaises(ValueError):
+                ocr.local_model()
 
-    async def test_result_is_cached_for_submission_retries(self):
-        ctx=N(bot=N(),user_data={})
-        extractor=AsyncMock(return_value={'status':'partial','values':{'pinfl':'12345678901234'}})
-        with patch.object(ocr,'extract_documents',extractor):
-            first=await ocr.prepare_document_summary(ctx)
-            second=await ocr.prepare_document_summary(ctx)
-        self.assertEqual(first,second)
-        extractor.assert_awaited_once()
-
-    async def test_vision_request_uses_bytes_not_telegram_token_url(self):
-        import asyncio
+    async def test_request_contains_image_bytes_only_to_fixed_localhost(self):
         def respond(request):
-            self.assertEqual(str(request.url),'https://codecraftapi.com/v1/chat/completions')
-            body=json.loads(request.content)
-            image=body['messages'][1]['content'][1]['image_url']['url']
-            self.assertTrue(image.startswith('data:image/jpeg;base64,'))
-            return httpx.Response(200,json={'choices':[{'finish_reason':'stop',
-                 'message':{'content':json.dumps({'pinfl':'12345678901234','vehicle_registration':'wrong source'})}}]})
-        bot=N(get_file=AsyncMock(return_value=N(file_size=3,download_as_bytearray=AsyncMock(return_value=self.image_bytes()))))
-        async with httpx.AsyncClient(base_url='https://codecraftapi.com',transport=httpx.MockTransport(respond)) as client:
-            result=await ocr.extract_one(client,bot,'passport_front','file',asyncio.Semaphore(1),'vision-test')
-        self.assertEqual(result['pinfl'],'12345678901234')
-        self.assertNotIn('vehicle_registration',result)
-
-    async def test_overlarge_document_rejected_before_download(self):
-        import asyncio
-        file=N(file_size=5_000_001,download_as_bytearray=AsyncMock())
-        with self.assertRaises(ValueError):
-            await ocr.extract_one(N(),N(get_file=AsyncMock(return_value=file)),
-                                   'passport_front','file',asyncio.Semaphore(1),'model')
-        file.download_as_bytearray.assert_not_awaited()
-
-    async def test_missing_fields_reviewed_from_crops(self):
-        import asyncio
-        requests = []
-        def respond(request):
+            self.assertEqual(str(request.url), 'http://127.0.0.1:11434/api/chat')
+            self.assertNotIn('authorization', request.headers)
             body = json.loads(request.content)
-            requests.append(body)
-            fields = {'pinfl': '12345678901234'} if len(requests) == 1 else {
-                'birth_date': '01.02.1990', 'birth_place': 'TOSHKENT'}
-            return httpx.Response(200, json={'choices': [{'finish_reason': 'stop',
-                'message': {'content': json.dumps(fields)}}]})
+            self.assertEqual(body['format'], 'json')
+            self.assertIs(body['stream'], False)
+            self.assertEqual(len(body['messages'][1]['images']), 1)
+            self.assertNotIn('api.telegram.org', request.content.decode())
+            return self.response({'pinfl': '12345678901234', 'vehicle_registration': 'WRONGSOURCE'})
         bot = N(get_file=AsyncMock(return_value=N(file_size=100,
             download_as_bytearray=AsyncMock(return_value=self.image_bytes()))))
-        async with httpx.AsyncClient(base_url='https://codecraftapi.com',
-                transport=httpx.MockTransport(respond)) as client:
+        async with self.client(respond) as client:
             result = await ocr.extract_one(client, bot, 'passport_front', 'file',
-                                          asyncio.Semaphore(1), 'vision-test')
-        self.assertEqual(result['birth_place'], 'TOSHKENT')
+                asyncio.Semaphore(1), 'qwen2.5vl:3b')
         self.assertEqual(result['pinfl'], '12345678901234')
-        self.assertEqual(len(requests[1]['messages'][1]['content']), 3)
+        self.assertNotIn('vehicle_registration', result)
 
-    async def test_ai_disabled_sends_nothing(self):
-        bot = N(get_file=AsyncMock())
-        with patch.dict(os.environ, {'CODECRAFT_API_KEY': 'test-only', 'DOCUMENT_AI_ENABLED': '0'}):
-            await ocr.extract_documents(bot, {'passport_front': 'file'})
-        bot.get_file.assert_not_awaited()
+    async def test_overlarge_document_rejected_before_download(self):
+        file = N(file_size=5_000_001, download_as_bytearray=AsyncMock())
+        with self.assertRaises(ValueError):
+            await ocr.download_view(N(get_file=AsyncMock(return_value=file)), 'file')
+        file.download_as_bytearray.assert_not_awaited()
+
+    async def test_front_back_read_together_without_selfie_or_car(self):
+        seen = []
+        def respond(request):
+            if request.url.path == '/api/show':
+                return httpx.Response(200, json={'capabilities': ['vision']})
+            body = json.loads(request.content)
+            seen.append(body)
+            return self.response({'pinfl': '12345678901234'})
+        bot = N(get_file=AsyncMock(return_value=N(file_size=100,
+            download_as_bytearray=AsyncMock(return_value=self.image_bytes()))))
+        with patch.object(ocr, 'local_client', return_value=self.client(respond)), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1'}):
+            result = await ocr.extract_documents(bot, {'passport_front': 'front',
+                'passport_back': 'back', 'selfie': 'private-selfie', 'car_front': 'private-car'})
+        self.assertEqual(bot.get_file.await_count, 2)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(len(seen[0]['messages'][1]['images']), 2)
+        self.assertEqual(result['backend'], 'local')
+
+    async def test_conflicting_document_readings_are_not_guessed(self):
+        with patch.object(ocr, 'local_client', return_value=self.client(
+                lambda request: httpx.Response(200, json={'capabilities': ['vision']}))), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1'}), \
+             patch.object(ocr, 'extract_group', AsyncMock(side_effect=[
+                {'pinfl': '12345678901234'}, {'pinfl': '12345678901235'}])):
+            result = await ocr.extract_documents(N(), {'passport_front': 'a', 'license_front': 'b'})
+        self.assertIsNone(result['values']['pinfl'])
+
+    async def test_one_failed_group_preserves_other_fields(self):
+        with patch.object(ocr, 'local_client', return_value=self.client(
+                lambda request: httpx.Response(200, json={'capabilities': ['vision']}))), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1'}), \
+             patch.object(ocr, 'extract_group', AsyncMock(side_effect=[RuntimeError('sensitive'),
+                {'vehicle_registration': 'ABC1234567'}])):
+            with self.assertLogs(ocr.logger, 'WARNING') as logs:
+                result = await ocr.extract_documents(N(), {'passport_front': 'a', 'tech_front': 'b'})
+        self.assertNotIn('sensitive', '\n'.join(logs.output))
+        self.assertEqual(result['values']['vehicle_registration'], 'ABC1234567')
+        self.assertEqual(result['failed_sources'], ['passport_front'])
+
+    async def test_incomplete_response_rejected(self):
+        async with self.client(lambda request: httpx.Response(200, json={
+                'done': True, 'done_reason': 'length', 'message': {'content': '{}'}})) as client:
+            with self.assertRaises(ValueError):
+                await ocr.read_local(client, 'qwen2.5vl:3b', ['bytes'], ('pinfl',), ('test',))
+
+    async def test_redirect_not_followed(self):
+        seen = []
+        def respond(request):
+            seen.append(str(request.url))
+            return httpx.Response(302, headers={'Location': 'https://example.com'})
+        async with self.client(respond) as client:
+            with self.assertRaises(httpx.HTTPStatusError):
+                await ocr.check_local_engine(client, 'qwen2.5vl:3b')
+        self.assertEqual(len(seen), 1)
+
+    async def test_result_cached_but_old_cloud_cache_replaced(self):
+        ctx = N(bot=N(), user_data={'_document_ocr': {'status': 'complete', 'values': {}}})
+        extractor = AsyncMock(return_value={'status': 'partial', 'values': {}, 'backend': 'local'})
+        with patch.object(ocr, 'extract_documents', extractor):
+            await ocr.prepare_document_summary(ctx)
+            await ocr.prepare_document_summary(ctx)
+        extractor.assert_awaited_once()
+
+    async def test_group_inference_serialized(self):
+        active = 0
+        peak = 0
+        async def read(*args):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            await asyncio.sleep(.01)
+            active -= 1
+            return {}
+        with patch.object(ocr, 'download_view', AsyncMock(return_value='image')), \
+             patch.object(ocr, 'read_local', side_effect=read):
+            await asyncio.gather(*[ocr.extract_group(N(), N(), ('passport_front',),
+                {'passport_front': 'file'}, 'qwen2.5vl:3b') for _ in range(3)])
+        self.assertEqual(peak, 1)
+
+    def test_submission_does_not_block_other_users(self):
+        from telegram.ext import ConversationHandler
+        from bot.handlers import driver
+        conversation = driver.build_driver_conversation()
+        self.assertFalse(conversation.states[driver.CAR_PLATE][0].block)
+        self.assertEqual(conversation.states[ConversationHandler.WAITING][0].callback,
+                         driver.submission_waiting)
+
+    async def test_pending_submission_keeps_documents(self):
+        from bot.handlers import driver
+        data = {'passport_front': 'keep-file'}
+        context = N(user_data=data)
+        update = N(message=N(reply_text=AsyncMock()))
+        await driver.submission_waiting(update, context)
+        self.assertEqual(data, {'passport_front': 'keep-file'})
+
+    async def test_timeout_keeps_completed_document_groups(self):
+        original_wait = asyncio.wait
+        async def short_wait(tasks, timeout):
+            return await original_wait(tasks, timeout=.02)
+        async def extract(client, bot, sources, data, model):
+            if 'passport_front' in sources:
+                return {'pinfl': '12345678901234'}
+            await asyncio.sleep(10)
+        with patch.object(ocr, 'local_client', return_value=self.client(
+                lambda request: httpx.Response(200, json={'capabilities': ['vision']}))), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1'}), \
+             patch.object(ocr, 'extract_group', side_effect=extract), \
+             patch.object(ocr.asyncio, 'wait', side_effect=short_wait):
+            result = await ocr.extract_documents(N(), {'passport_front': 'a', 'tech_front': 'b'})
+        self.assertEqual(result['values']['pinfl'], '12345678901234')
+        self.assertEqual(result['failed_sources'], ['tech_front'])

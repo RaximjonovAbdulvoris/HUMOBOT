@@ -1,4 +1,4 @@
-"""CodeCraft vision extraction. No document bytes or API responses are persisted/logged."""
+"""Local-only vision extraction. Documents never go to an external AI endpoint."""
 import asyncio
 import base64
 from datetime import datetime
@@ -9,6 +9,7 @@ from PIL import Image, ImageOps, ImageFilter
 import logging
 import os
 import re
+from weakref import WeakKeyDictionary
 
 import httpx
 
@@ -88,103 +89,159 @@ def prepare_images(raw):
         buffer = BytesIO()
         view.save(buffer, format='JPEG', quality=92)
         return base64.b64encode(buffer.getvalue()).decode('ascii')
-    width, height = image.size
-    return [encode(image), encode(image.crop((0, 0, width, int(height * .65)))),
-            encode(image.crop((0, int(height * .35), width, height)))]
+    return [encode(image)]
+
+
+LOCAL_ORIGIN = 'http://127.0.0.1:11434'
+LOCAL_MODELS = frozenset(('qwen2.5vl:3b', 'qwen2.5vl:7b'))
+GROUPS = (
+    ('passport_front', 'passport_back'),
+    ('license_front', 'license_back'),
+    ('tech_front', 'tech_back'),
+)
+_LOCAL_LOCKS = WeakKeyDictionary()
+
+
+def enabled():
+    return os.environ.get('DOCUMENT_AI_ENABLED', '1') == '1'
+
+
+def local_model():
+    model = os.environ.get('LOCAL_OCR_MODEL', 'qwen2.5vl:3b').strip()
+    if model not in LOCAL_MODELS:
+        raise ValueError('Only approved locally installed vision models are accepted')
+    return model
+
+
+def local_client():
+    # No configurable host, API key, proxies, or redirects. Never fall back to cloud.
+    return httpx.AsyncClient(base_url=LOCAL_ORIGIN, trust_env=False,
+        follow_redirects=False, timeout=httpx.Timeout(150.0, connect=3.0))
+
+
+async def check_local_engine(client, model):
+    response = await client.post('/api/show', json={'model': model})
+    response.raise_for_status()
+    metadata = response.json()
+    if metadata.get('remote_host') or metadata.get('remote_model'):
+        raise ValueError('Remote models are not allowed')
+    if 'vision' not in metadata.get('capabilities', []):
+        raise ValueError('The installed model does not support images')
+
+
+async def read_local(client, model, images, fields, labels):
+    response = await client.post('/api/chat', json={
+        'model': model, 'stream': False, 'format': 'json', 'keep_alive': 0,
+        'options': {'temperature': 0, 'num_predict': 1024, 'num_ctx': 4096},
+        'messages': [
+            {'role': 'system', 'content': PROMPT},
+            {'role': 'user', 'content':
+                f'Images in order: {", ".join(labels)}. These are sides of the same document. '
+                f'Return these keys: {", ".join(fields)}. '
+                'Compare both sides. If the same field has conflicting readings, return null. '
+                'Never calculate birth date from PINFL or guess missing characters.',
+             'images': images},
+        ],
+    })
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get('done') is not True or payload.get('done_reason') != 'stop':
+        raise ValueError('Incomplete extraction')
+    values = normalize(json.loads(payload['message']['content']))
+    return {field: values[field] for field in fields}
+
+
+async def download_view(bot, file_id):
+    file = await bot.get_file(file_id)
+    if file.file_size and file.file_size > 5_000_000:
+        raise ValueError('Image too large')
+    image = await file.download_as_bytearray()
+    if len(image) > 5_000_000:
+        raise ValueError('Image too large')
+    # Processing is in memory; EXIF/GPS is discarded before local inference.
+    views = await asyncio.to_thread(prepare_images, image)
+    return views[0]
 
 
 async def extract_one(client, bot, source, file_id, semaphore, model):
     async with semaphore:
-        file = await bot.get_file(file_id)
-        if file.file_size and file.file_size > 5_000_000:
-            raise ValueError('Image too large')
-        image = await file.download_as_bytearray()
-        if len(image) > 5_000_000:
-            raise ValueError('Image too large')
-        views = await asyncio.to_thread(prepare_images, image)
-        requested = SOURCES[source]
-        async def read(images, fields):
-            content = [{'type': 'text', 'text':
-                f'Document: {source}. Keys: {", ".join(fields)}. '
-                'Images are views of the SAME document. Inspect small print carefully.'}]
-            content.extend({'type': 'image_url', 'image_url': {
-                'url': f'data:image/jpeg;base64,{encoded}', 'detail': 'high'}} for encoded in images)
-            response = await client.post('/v1/chat/completions', json={
-                'model': model, 'stream': False, 'max_tokens': 8192,
-                'response_format': {'type': 'json_object'},
-                'messages': [{'role': 'system', 'content': PROMPT},
-                             {'role': 'user', 'content': content}],
-            })
-            response.raise_for_status()
-            choice = response.json()['choices'][0]
-            if choice.get('finish_reason') != 'stop':
-                raise ValueError('Incomplete extraction')
-            return normalize(json.loads(choice['message']['content']))
-        values = await read(views[:1], requested)
-        missing = [field for field in requested if not values[field]]
-        if missing:
-            try:
-                review = await read(views[1:], missing)
-                for field in missing:
-                    values[field] = review[field]
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                # Preserve the successful first pass; never log provider response bodies.
-                logger.warning('Document detail review unavailable for %s', source)
-        return {field: values[field] for field in requested}
+        image = await download_view(bot, file_id)
+        return await read_local(client, model, [image], SOURCES[source], [source])
+
+
+async def extract_group(client, bot, sources, data, model):
+    # One inference at a time across applications limits CPU and RAM consumption.
+    loop = asyncio.get_running_loop()
+    lock = _LOCAL_LOCKS.setdefault(loop, asyncio.Lock())
+    async with lock:
+        images = [await download_view(bot, data[source]) for source in sources]
+        fields = tuple(dict.fromkeys(field for source in sources for field in SOURCES[source]))
+        return await read_local(client, model, images, fields, sources)
 
 
 async def extract_documents(bot, data):
-    key = os.environ.get('CODECRAFT_API_KEY', '').strip()
-    if not key or os.environ.get('DOCUMENT_AI_ENABLED', '1') != '1':
-        return {'status': 'unavailable', 'values': {}, 'failed_sources': []}
-    model = os.environ.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna')
-    # Fixed trusted origin: credentials and documents must not follow redirects.
-    semaphore = asyncio.Semaphore(2)
-    selected = [(source, data[source]) for source in SOURCES if data.get(source)]
-    async with httpx.AsyncClient(
-        base_url='https://codecraftapi.com', headers={'Authorization': f'Bearer {key}'},
-        timeout=httpx.Timeout(60.0, connect=15.0), follow_redirects=False, trust_env=False,
-    ) as client:
-        results = await asyncio.gather(*[
-            extract_one(client, bot, source, file_id, semaphore, model)
-            for source, file_id in selected
-        ], return_exceptions=True)
+    unavailable = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': 'local'}
+    if not enabled():
+        return unavailable
+    groups = [tuple(source for source in group if data.get(source)) for group in GROUPS]
+    groups = [group for group in groups if group]
+    if not groups:
+        return unavailable
+    try:
+        model = local_model()
+        async with local_client() as client:
+            # Fail before downloading documents when the local engine is not ready.
+            await check_local_engine(client, model)
+            tasks = [asyncio.create_task(extract_group(client, bot, group, data, model))
+                     for group in groups]
+            try:
+                done, pending = await asyncio.wait(tasks, timeout=480)
+                for task in pending:
+                    task.cancel()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as error:
+        # Never include provider bodies, document text, URLs or credentials in logs.
+        logger.warning('Local document engine unavailable (%s)', type(error).__name__)
+        return unavailable
     candidates = {field: set() for field in FIELDS}
     failed = []
-    for (source, _), result in zip(selected, results):
+    for group, result in zip(groups, results):
         if isinstance(result, BaseException):
-            failed.append(source)
-            # Exception text can contain credentials, document text, or URLs.
-            status = result.response.status_code if isinstance(result, httpx.HTTPStatusError) else None
-            logger.warning('Document extraction failed for %s (%s, HTTP=%s)', source, type(result).__name__, status)
+            failed.extend(group)
+            logger.warning('Local document extraction failed (%s)', type(result).__name__)
             continue
         for field, value in result.items():
-            if value:
+            if field in candidates and value:
                 candidates[field].add(value)
     values = {field: next(iter(items)) if len(items) == 1 else None
               for field, items in candidates.items()}
     return {'status': 'complete' if all(values.values()) and not failed else 'partial',
-            'values': values, 'failed_sources': failed}
+            'values': values, 'failed_sources': failed, 'backend': 'local'}
 
 
 async def prepare_document_summary(context):
     data = context.user_data
-    if '_document_ocr' not in data:
+    if data.get('_document_ocr', {}).get('backend') != 'local':
         try:
             data['_document_ocr'] = await asyncio.wait_for(
-                extract_documents(context.bot, data), timeout=240,
+                extract_documents(context.bot, data), timeout=495,
             )
         except Exception as error:
             logger.warning('Document extraction unavailable (%s)', type(error).__name__)
-            data['_document_ocr'] = {'status': 'unavailable', 'values': {}, 'failed_sources': []}
+            data['_document_ocr'] = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': 'local'}
     return format_summary(data['_document_ocr'])
 
 
 def format_summary(result):
     lines = ['📋 <b>Hujjatlardan o‘qilgan ma’lumotlar</b>',
-             'AI natijasi — kiritishdan oldin asl hujjat bilan tekshiring.']
+             'Mahalliy AI natijasi — kiritishdan oldin asl hujjat bilan tekshiring.']
     if result.get('status') == 'unavailable':
-        lines.append('⚠️ AI tekshiruvi mavjud emas. Rasmlardan qo‘lda tekshiring.')
+        lines.append('⚠️ Mahalliy AI tekshiruvi mavjud emas. Rasmlardan qo‘lda tekshiring.')
     values = result.get('values', {})
     for field, label in FIELDS.items():
         value = values.get(field)

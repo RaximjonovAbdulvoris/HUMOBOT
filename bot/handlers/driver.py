@@ -233,7 +233,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "Endi sizdan hujjatlaringizning *originalini rasmga olib* jo'natishingiz so'raladi.\n\n"
         "❌ Soliqdan olingan skrinshot QABUL QILINMAYDI!\n\n"
         "Hujjatlardagi ma’lumotlar arizani ko‘rib chiqish uchun operatorlarga va "
-        "avtomatik o‘qish uchun CodeCraft AI xizmatiga yuboriladi. "
+        "avtomatik o‘qish uchun bizning serverimizdagi mahalliy AI orqali qayta ishlanadi. "
         "Davom etish orqali ushbu ishlov berishga rozilik bildirasiz.",
         parse_mode="Markdown",
         reply_markup=CONTINUE_KB,
@@ -530,7 +530,8 @@ async def get_car_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["user_full_name"] = user.full_name or ""
 
     await update.message.reply_text(
-        "⏳ Hujjatlaringiz tekshirilmoqda. Ariza yuborilishini kuting — qayta yuborish shart emas."
+        "⏳ Hujjatlaringiz mahalliy AI yordamida tekshirilmoqda. Bu bir necha daqiqa "
+        "davom etishi mumkin. Ariza yuborilishini kuting — qayta yuborish shart emas."
     )
     try:
         await _send_to_driver_group(context)
@@ -733,6 +734,16 @@ def _photo_state(get_handler, wrong_handler):
     ]
 
 
+async def submission_waiting(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Do not allow /start or another form to erase a document batch being read.
+    if update.message:
+        await update.message.reply_text(
+            "⏳ Arizangiz hali tekshirilmoqda. Tayyor bo‘lgach xabar beramiz. "
+            "Hujjatlarni qayta yuborishingiz shart emas."
+        )
+    return ConversationHandler.WAITING
+
+
 def build_driver_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[
@@ -742,6 +753,7 @@ def build_driver_conversation() -> ConversationHandler:
             ),
         ],
         states={
+            ConversationHandler.WAITING: [MessageHandler(filters.ALL, submission_waiting)],
             JOIN_GROUP: [
                 CallbackQueryHandler(
                     check_membership, pattern=r"^driver:check_membership$",
@@ -771,7 +783,7 @@ def build_driver_conversation() -> ConversationHandler:
             LITSENZIYA: _photo_state(get_litsenziya, litsenziya_wrong),
             CAR_PHOTOS: _photo_state(get_car_photos, car_photos_wrong),
             CAR_PLATE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_car_plate),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_car_plate, block=False),
                 MessageHandler(~filters.COMMAND, car_plate_wrong),
             ],
         },
