@@ -77,6 +77,8 @@ async def stale_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def register_handlers(app) -> None:
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE, intercept_pending_reply), group=-1)
+    from bot.asset_ids import asset_id
+    app.add_handler(CommandHandler("asset_id", asset_id, filters.ChatType.PRIVATE))
     app.add_handler(build_region_handler())
     app.add_handler(build_application_conversation())
     register_operator_handlers(app)
@@ -124,6 +126,11 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def post_init(application) -> None:
+    from bot.template_cards import create_instruction_cards
+    try:
+        create_instruction_cards()
+    except Exception:
+        logger.warning("Instruction cards unavailable; text prompts will be used.")
     await remove_legacy_brand_keyboards(application)
     await refresh_driver_keyboards(application)
     await warmup_templates(application)

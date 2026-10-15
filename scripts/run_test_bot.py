@@ -33,6 +33,11 @@ def configure():
         'NAMANGAN_SPECTRE_GROUP': '-5243428930', 'TASHKENT_ARCHIVE_GROUP': '',
         'PERSIST_DIR': str(STATE), 'SUBSCRIPTION_CHANNEL_ID': '@WB_HUMO_TAXI',
     })
+    for key in ("INCOMPLETE_GROUP", "OTHER_PARK_GROUP", "WELCOME_STICKER_ID", "SUCCESS_STICKER_ID"):
+        os.environ[key] = values.get(key, "")
+    for action in ("READY", "PROGRESS", "INCOMPLETE", "OTHERPARK", "DELETE"):
+        key = f"PREMIUM_ICON_{action}"
+        os.environ[key] = values.get(key, "")
     STATE.mkdir(mode=0o700, exist_ok=True)
     # Local routing overrides take precedence, so explicitly isolate these too.
     routes = {key: os.environ[key] for key in (

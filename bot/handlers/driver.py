@@ -22,6 +22,8 @@ from telegram.ext import (
 
 from bot.config import template_path
 from bot.document_ocr import prepare_document_summary
+from bot.application_ids import application_code
+from bot.presentation import send_brand_sticker, with_keyboard_fallback
 from bot.counter import next_index
 from bot.handlers.operator import build_operator_keyboard, register_application
 from bot.handlers.start import MENU_DRIVER, main_keyboard, require_region, cancel
@@ -525,6 +527,9 @@ async def get_car_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["user_username"] = user.username or ""
     context.user_data["user_full_name"] = user.full_name or ""
 
+    await update.message.reply_text(
+        "⏳ Hujjatlaringiz tekshirilmoqda. Ariza yuborilishini kuting — qayta yuborish shart emas."
+    )
     try:
         await _send_to_driver_group(context)
     except Exception as e:
@@ -542,12 +547,15 @@ async def get_car_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return CAR_PLATE
 
+    await send_brand_sticker(update.message, 'SUCCESS')
     await update.message.reply_text(
-        "🎉 *Tabriklaymiz!*\n\n"
-        f"{region_name(_region_required(context))} haydovchilik arizangiz qabul qilindi. "
-        "Tez orada operatorlarimiz siz bilan bog‘lanadi.",
-        parse_mode="Markdown",
-        reply_markup=_regional_keyboard(context),
+        "✅ <b>Arizangiz qabul qilindi</b>\n\n"
+        f"Ariza kodi: <code>{h(context.user_data['_application_code'])}</code>\n"
+        f"Hudud: {h(region_name(_region_required(context)))}\n\n"
+        "Hujjatlaringiz operatorga yuborildi. Natija yoki qo‘shimcha ma’lumot "
+        "kerak bo‘lsa, shu bot orqali xabar beramiz.\n\n"
+        "Aloqa: +998 78 113-80-81",
+        parse_mode="HTML", reply_markup=_regional_keyboard(context),
     )
     clear_application(context)
     return ConversationHandler.END
@@ -588,16 +596,21 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
         f'<a href="tg://user?id={user_id}">{h(display)}</a>' if user_id else h(display)
     )
 
+    code = application_code(d)
     document_summary = await prepare_document_summary(context)
 
-    caption_main = (
-        f"📝 <b>{h(region_name(region))} — YANGI ARIZA</b>\n\n"
-        f"👤 Foydalanuvchi: {user_link_html}\n"
-        f"🪪 Ism familiya: {h(d.get('name', '-'))}\n"
-        f"📞 Tel: {h(d.get('phone', '-'))}\n"
-        f"🚗 Mashina raqami: {h(d.get('car_plate', '-'))}"
+    details = (
+        f"<b>WB HUMO · HAYDOVCHI ARIZASI</b>\n"
+        f"Ariza: <code>{code}</code> · {h(region_name(region))}\n\n"
+        f"<b>Arizachi</b>\n{user_link_html}\n"
+        f"F.I.Sh.: {h(str(d.get('name', '-'))[:160])}\n"
+        f"Telefon: <code>{h(str(d.get('phone', '-'))[:40])}</code>\n"
+        f"Davlat raqami: <code>{h(str(d.get('car_plate', '-'))[:30])}</code>\n\n"
+        f"{document_summary}\n\n"
+        "<b>Operator boshqaruvi</b>\nQuyidagi amallardan birini tanlang."
     )
-    caption_selfie = f"🤳 {h(d.get('name', '-'))} — selfie va litsenziya"
+    caption_main = f"📎 <b>{code}</b> · Hujjatlar va avtomobil · 1/2"
+    caption_selfie = f"📎 <b>{code}</b> · Selfie va litsenziya · 2/2"
 
     main_album_ids = [
         d.get("passport_front"),
@@ -684,13 +697,9 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
         }
 
         if "kb_msg_id" not in dispatch:
-            kb_msg = await context.bot.send_message(
+            kb_msg = await with_keyboard_fallback(context.bot.send_message,
                 chat_id=chat_id,
-                text=(
-                    f"{document_summary}\n\n"
-                    "👇 Ariza bo'yicha amal tanlang:\n"
-                    f"👤 Arizachi: {user_link_html}"
-                ),
+                text=details,
                 parse_mode=ParseMode.HTML,
                 reply_markup=build_operator_keyboard(user_id),
             )
@@ -707,6 +716,7 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
             applicant_name=d.get("name") or full_name or "Arizachi",
             username=username,
             media_albums=media_albums,
+            code=code,
         )
 
     logger.info("[driver] sent application to group #%s (%s)", idx + 1, chat_id)

@@ -6,6 +6,7 @@ application: one applicant can have more than one regional application at the
 same time.
 """
 import logging
+import re
 from html import escape as h
 
 from telegram import InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -13,6 +14,9 @@ from telegram.error import BadRequest
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.regions import archive_group, region_name
+from bot.route_settings import destination as queue_destination
+from bot.presentation import button as styled_button, with_keyboard_fallback
+from bot.application_ids import application_code
 from bot.brand_cleanup import is_plain_application_message, remove_buttons_command
 
 logger = logging.getLogger(__name__)
@@ -52,7 +56,9 @@ def build_operator_keyboard(
     applicant_user_id: int, in_progress: bool = False
 ) -> InlineKeyboardMarkup:
     def button(label, action):
-        return InlineKeyboardButton(label, callback_data=f"op:{action}:{applicant_user_id}")
+        style = {"ready": "success", "delete": "danger"}.get(action, "primary")
+        return styled_button(label, action=f"op:{action}:{applicant_user_id}",
+                             style=style, icon=action.upper())
     return InlineKeyboardMarkup([
         [button("✅ Tayyor", "ready"),
          button("Jarayonda🟡" if in_progress else "Jarayonda🔴", "progress")],
@@ -82,7 +88,7 @@ async def refresh_driver_keyboards(application) -> None:
                 continue
             seen.add(key)
             try:
-                await application.bot.edit_message_reply_markup(
+                await with_keyboard_fallback(application.bot.edit_message_reply_markup,
                     chat_id=chat_id, message_id=message_id,
                     reply_markup=build_operator_keyboard(
                         user_id, application.bot_data.get("progress_state", {}).get(key, False)
@@ -155,6 +161,7 @@ def register_application(
     applicant_name: str = "",
     username: str = "",
     media_albums: list[dict] | None = None,
+    code: str = "",
 ):
     """Register a form application and return its stable record key.
 
@@ -165,6 +172,7 @@ def register_application(
     key = _application_key(group_chat_id, kb_msg_id)
     record = {
         "application_key": key,
+        "code": code,
         "applicant_id": int(applicant_id),
         "region": region,
         "kind": kind,
@@ -403,6 +411,7 @@ async def _archive_application_locked(bot, record: dict, destination: str) -> bo
                     chat_id=destination,
                     from_chat_id=source,
                     message_id=record["kb_msg_id"],
+                    reply_markup=InlineKeyboardMarkup([]),
                 )
                 if copied is None:
                     raise RuntimeError("Telegram did not confirm the keyboard copy")
@@ -545,6 +554,7 @@ async def _archive_reconstructed_albums(
                 chat_id=destination,
                 from_chat_id=record["group_chat_id"],
                 message_id=record["kb_msg_id"],
+                reply_markup=InlineKeyboardMarkup([]),
             )
             if copied is None:
                 raise RuntimeError("Telegram did not confirm the keyboard copy")
@@ -639,14 +649,41 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if action in ("incomplete", "otherpark"):
         key, record = resolved
         notices = record.setdefault("sent_notices", {})
-        if notices.get(action):
+        if notices.get(action) and record.get("queue_forwarded", {}).get(action):
             await query.message.reply_text("Bu xabar arizachiga avval yuborilgan.")
+            return
+        label = "Chala rasm" if action == "incomplete" else "Boshqa park"
+        route_key = "INCOMPLETE_GROUP" if action == "incomplete" else "OTHER_PARK_GROUP"
+        queue = record.get("queue_destinations", {}).get(action) or queue_destination(f"{record.get('region', '').upper()}_{route_key}") or queue_destination(route_key)
+        if not re.fullmatch(r'-[1-9][0-9]*', str(queue)):
+            await query.message.reply_text(
+                f"⚠️ «{label}» guruhi sozlanmagan. Guruh ID sini {route_key} ga kiriting. "
+                "Ariza o‘z joyida qoldi; arizachiga xabar yuborilmadi."
+            )
+            return
+        if str(queue) == str(record['group_chat_id']):
+            await query.message.reply_text("Qabul qiluvchi guruh operator guruhidan alohida bo‘lishi kerak.")
+            return
+        states = record.setdefault('queue_states', {})
+        queue_state = states.setdefault(action, {'photos': {}, 'kb': False})
+        # Pin the queue once a copy begins, even if configuration changes later.
+        pinned = record.setdefault('queue_destinations', {}).setdefault(action, str(queue))
+        shadow = dict(record, archive_state=queue_state)
+        if not await _archive_application(context.bot, shadow, pinned):
+            await query.message.reply_text(
+                f"⚠️ Ariza «{label}» guruhiga to‘liq yuborilmadi. "
+                "Asl ariza saqlandi; arizachiga xabar yuborilmadi."
+            )
+            return
+        record.setdefault("queue_forwarded", {})[action] = True
+        if notices.get(action):
+            await query.message.reply_text(f"✅ Ariza «{label}» guruhiga yuborildi. Xabar arizachiga avval yuborilgan.")
             return
         text = INCOMPLETE_TEXT if action == "incomplete" else OTHER_PARK_TEXT
         try:
             await context.bot.send_message(
                 chat_id=record["applicant_id"],
-                text=text + f"\n\n📍 {h(_branch(record))}", parse_mode="HTML",
+                text=text + f"\n\n📍 {h(_branch(record))}\nAriza: <code>{h(record.get('code') or 'Eski ariza')}</code>", parse_mode="HTML",
             )
         except Exception:
             await query.message.reply_text(
@@ -655,7 +692,7 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
         notices[action] = True
-        await query.message.reply_text("✅ Xabar arizachiga yuborildi. Ariza guruhda saqlandi.")
+        await query.message.reply_text(f"✅ Ariza «{label}» guruhiga va xabar arizachiga yuborildi. Asl ariza saqlandi.")
         return
 
     if action == "delete":
@@ -711,7 +748,7 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             await context.bot.send_message(
                 chat_id=applicant_id,
-                text=READY_TEXT + f"\n📍 <b>{h(_branch(record))}</b>",
+                text=READY_TEXT + f"\n📍 <b>{h(_branch(record))}</b>\nAriza: <code>{h(record.get('code') or 'Eski ariza')}</code>",
                 parse_mode="HTML",
             )
         except Exception as error:
@@ -752,19 +789,18 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if action == "progress":
         key, record = resolved
         progress_state = context.bot_data.setdefault("progress_state", {})
-        if progress_state.get(key, False):
-            await query.answer("Jarayon allaqachon boshlangan 🟡", show_alert=False)
-            return
-        progress_state[key] = True
+        new_state = not progress_state.get(key, False)
         try:
-            await query.edit_message_reply_markup(
-                reply_markup=build_operator_keyboard(
-                    applicant_id, in_progress=True
-                )
+            await with_keyboard_fallback(query.edit_message_reply_markup,
+                reply_markup=build_operator_keyboard(applicant_id, in_progress=new_state)
             )
         except Exception:
             logger.warning("progress: could not update keyboard for %s", key)
+            await query.message.reply_text("Holatni yangilab bo‘lmadi. Qayta urinib ko‘ring.")
+            return
+        progress_state[key] = new_state
         return
+
 
     if action == "comment":
         await query.message.reply_text(

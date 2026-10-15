@@ -17,6 +17,10 @@ TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
 
 def template_path(name: str) -> str | None:
+    from bot.template_cards import generated_directory
+    generated = generated_directory() / f"{name}.png"
+    if generated.exists():
+        return str(generated)
     for ext in ("jpg", "jpeg", "png"):
         p = os.path.join(TEMPLATES_DIR, f"{name}.{ext}")
         if os.path.exists(p):

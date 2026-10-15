@@ -1,4 +1,5 @@
 from hashlib import sha256
+from bot.presentation import menu_button, send_brand_sticker
 from pathlib import Path
 from uuid import uuid4
 
@@ -43,8 +44,10 @@ TASHKENT_OFFICE_KEYBOARD = InlineKeyboardMarkup([
 ])
 
 def main_keyboard(region: str) -> ReplyKeyboardMarkup:
-    rows = [[MENU_DRIVER], [MENU_BRAND], [MENU_SPECTRE],
-            [MENU_CONTACT], [MENU_OFFICE], [MENU_REGION]]
+    rows = [[menu_button(MENU_DRIVER, "success")],
+            [menu_button(MENU_BRAND), menu_button(MENU_SPECTRE)],
+            [menu_button(MENU_CONTACT), menu_button(MENU_OFFICE)],
+            [menu_button(MENU_REGION)]]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -67,10 +70,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.bot_data.get("pending_user_replies", {}).pop(update.effective_user.id, None)
     nonce = uuid4().hex[:10]
     context.user_data["region_choice_nonce"] = nonce
+    await send_brand_sticker(update.effective_message, "WELCOME")
     await update.effective_message.reply_text(
-        "• WB HUMO TAXI • xush kelibsiz\n\n"
-        "“WB HUMO TAXI” ga ulanish va avtomobilni brendlash uchun shu botga ariza qoldiring!\n\n"
-        "Avval ishlamoqchi bo’lgan shahringizni tanlang!",
+        "<b>WB HUMO TAXI</b>\nHaydovchilar uchun ariza markazi\n\n"
+        "Ulanish, avtomobilni brendlash yoki Spectre Energy bo‘yicha "
+        "murojaatingizni shu yerda qoldiring.\n\n"
+        "<b>1-qadam · Shaharni tanlang</b>\n"
+        "Arizangiz tanlangan shahardagi operatorga yuboriladi.",
         parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )

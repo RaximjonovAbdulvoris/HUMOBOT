@@ -70,10 +70,9 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
         await start.start(msg, ctx)
         calls = msg.effective_message.reply_text.await_args_list
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0].args[0],
-            "• WB HUMO TAXI • xush kelibsiz\n\n"
-            "“WB HUMO TAXI” ga ulanish va avtomobilni brendlash uchun shu botga ariza qoldiring!\n\n"
-            "Avval ishlamoqchi bo’lgan shahringizni tanlang!")
+        self.assertIn("WB HUMO TAXI", calls[0].args[0])
+        self.assertIn("Shaharni tanlang", calls[0].args[0])
+        self.assertEqual(calls[0].kwargs["parse_mode"], "HTML")
         self.assertTrue(calls[0].kwargs["reply_markup"].remove_keyboard)
         self.assertEqual(calls[1].args[0], "Qaysi hududda ishlamoqchisiz?")
         buttons = calls[1].kwargs["reply_markup"].inline_keyboard

@@ -1,11 +1,16 @@
 import unittest
 from types import SimpleNamespace as N
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from telegram.error import BadRequest, Forbidden
 from test_operator_safety import FakeBot, FakeMessage, _update
 from bot.handlers import operator
 
 class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        patcher = patch("bot.handlers.operator.queue_destination", side_effect=lambda key: "-2001" if key.endswith("INCOMPLETE_GROUP") else "-2002")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def setup_case(self):
         bot = FakeBot()
         ctx = N(bot=bot, bot_data={})

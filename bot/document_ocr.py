@@ -35,7 +35,10 @@ PROMPT = (
     'pinfl is the 14 digit JShShIR/PINFL, not a passport number. '
     'Dates must be DD.MM.YYYY. license_number is the driving licence serial/number; '
     'license_expiry is the licence expiry date (field 4b), NOT issue date or category date. '
-    'vehicle_registration is the registration certificate serial and number, NOT the '
+    'vehicle_registration is the registration certificate (texpasport/guvohnoma) serial and number. '
+    'Find the printed certificate number, often next to a No sign and 2-3 series letters. '
+    'Read both the series and digits together, omit spaces and separators, preserve leading zeros. '
+    'This is NOT the '
     'vehicle plate, VIN, engine or chassis number. birth_place must be copied as printed. '
     'If absent, obscured, conflicting, or uncertain, use null. No markdown or commentary.'
 )
@@ -53,6 +56,11 @@ def normalize(raw):
         elif key == 'pinfl':
             value = re.sub(r'\s', '', value)
             if not re.fullmatch(r'[0-9]{14}', value):
+                value = None
+        elif key in ('license_number', 'vehicle_registration'):
+            value = re.sub(r'[\s.\-]', '', value).upper()
+            value = value.translate(str.maketrans('АВСЕНКМОРТХ', 'ABCEHKMOPTX'))
+            if not re.fullmatch(r'[A-Z0-9]{5,14}', value):
                 value = None
         elif key in ('birth_date', 'license_expiry'):
             try:
@@ -103,7 +111,7 @@ async def extract_documents(bot, data):
     selected = [(source, data[source]) for source in SOURCES if data.get(source)]
     async with httpx.AsyncClient(
         base_url='https://codecraftapi.com', headers={'Authorization': f'Bearer {key}'},
-        timeout=httpx.Timeout(20.0, connect=10.0), follow_redirects=False,
+        timeout=httpx.Timeout(60.0, connect=15.0), follow_redirects=False,
     ) as client:
         results = await asyncio.gather(*[
             extract_one(client, bot, source, file_id, semaphore, model)
@@ -115,7 +123,8 @@ async def extract_documents(bot, data):
         if isinstance(result, BaseException):
             failed.append(source)
             # Exception text can contain credentials, document text, or URLs.
-            logger.warning('Document extraction failed for %s (%s)', source, type(result).__name__)
+            status = result.response.status_code if isinstance(result, httpx.HTTPStatusError) else None
+            logger.warning('Document extraction failed for %s (%s, HTTP=%s)', source, type(result).__name__, status)
             continue
         for field, value in result.items():
             if value:
@@ -131,7 +140,7 @@ async def prepare_document_summary(context):
     if '_document_ocr' not in data:
         try:
             data['_document_ocr'] = await asyncio.wait_for(
-                extract_documents(context.bot, data), timeout=50,
+                extract_documents(context.bot, data), timeout=150,
             )
         except Exception as error:
             logger.warning('Document extraction unavailable (%s)', type(error).__name__)

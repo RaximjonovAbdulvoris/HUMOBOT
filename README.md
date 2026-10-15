@@ -81,3 +81,45 @@ Personal document/selfie sample images are excluded from this repository.
 The bot falls back to text instructions and text office addresses. You can
 place your own approved images in `bot/templates` on the server; do not
 commit personal documents or selfies. See `bot/templates/README.md` for names.
+
+## Operator refresh
+
+Every new driver, brand and Spectre application has a persistent sequential
+`HM-000001` reference. Keep `application_numbers.sqlite3` in the durable
+`PERSIST_DIR` alongside the bot state; do not delete it during updates.
+
+Driver identity/contact details and copyable AI fields are now in one operator
+card. Album captions only identify the application and album part. Progress
+can be toggled between red and yellow; a failed keyboard edit does not alter
+the stored state.
+
+Set `INCOMPLETE_GROUP` and `OTHER_PARK_GROUP` to separate negative Telegram chat
+IDs. City-specific overrides (`TASHKENT_INCOMPLETE_GROUP`, etc.) are supported.
+On a button press, the full application albums and information card are copied
+to the queue without active operator buttons; the applicant is notified only
+after the copy is confirmed. The source application remains in the operator
+group. Checkpoints prevent repeating confirmed copies on notification retry.
+Missing routes block the operation with an actionable operator message.
+
+`python scripts/run_test_bot.py` loads these global queue IDs and premium asset
+IDs from `.env.test`. It continues to use only the fixed test application groups.
+
+`Pillow` generates 12 consistent navy/teal/gold instruction cards at startup in
+`PERSIST_DIR/visual_templates`. These are abstract guides, with no personal
+photos, passport replicas, numbers, faces or signatures. Install updated
+requirements before restarting. Generation failure falls back to text prompts.
+
+For optional branded welcome/success stickers, set `WELCOME_STICKER_ID` and
+`SUCCESS_STICKER_ID`. Reply to a sticker with `/asset_id` in the bot's private
+chat to obtain its file ID. The same command returns custom emoji IDs from an
+emoji message. Premium icon IDs are opt-in; according to Telegram, the bot owner
+must have Premium (or the bot must have an eligible purchased username). Without
+IDs, the interface uses colored Telegram-native buttons and standard emoji.
+A sticker send failure does not interrupt a form.
+
+Vehicle-certificate OCR normalizes spacing/separators and Cyrillic lookalikes
+before comparing front/back readings, while still flagging conflicting values.
+Provider HTTP status is logged without document text or credentials. Vision
+requests have a 60-second read timeout and 150-second overall bound; the user
+gets a waiting message. Real-world reading accuracy still needs a test on the
+server with clear certificate photos; normalized values must be checked.

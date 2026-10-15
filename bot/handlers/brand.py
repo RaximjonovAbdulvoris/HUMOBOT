@@ -1,4 +1,6 @@
 import logging
+from bot.application_ids import application_code
+from bot.presentation import send_brand_sticker
 from html import escape as h
 
 from telegram import (
@@ -282,7 +284,9 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_link = f'<a href="tg://user?id={user.id}">{h(display)}</a>'
     branch_title = _kind_title(kind)
     branch_icon = "⚡" if kind == "spectre" else "🎨"
+    code = application_code(data)
     text = (
+        f"Ariza: <code>{code}</code>\n"
         f"{branch_icon} <b>{h(region_name(region))} — YANGI {h(branch_title.upper())} ARIZA</b>\n\n"
         f"👤 Foydalanuvchi: {user_link}\n"
         f"🪪 FIO: {h(data['b_name'])}\n"
@@ -315,8 +319,10 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return BRAND_PLATE
 
+    await send_brand_sticker(update.message, "SUCCESS")
     await update.message.reply_text(
-        "🎉 *Tabriklaymiz!*\n\n"
+        f"Ariza kodi: `{code}`\n\n"
+        "✅ *Arizangiz qabul qilindi*\n\n"
         f"{region_name(region)} — {_kind_title(kind)} arizangiz qabul qilindi. "
         "Tez orada operatorlarimiz bog‘lanadi.",
         parse_mode="Markdown", reply_markup=_regional_keyboard(context),
