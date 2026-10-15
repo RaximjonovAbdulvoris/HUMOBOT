@@ -136,6 +136,8 @@ async def post_init(application) -> None:
     await remove_legacy_brand_keyboards(application)
     await refresh_driver_keyboards(application)
     await warmup_templates(application)
+    from bot.background_ocr import resume_pending
+    application.job_queue.run_once(resume_pending, when=0)
 
 
 def main() -> None:

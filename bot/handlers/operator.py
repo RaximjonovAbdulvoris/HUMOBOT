@@ -111,6 +111,8 @@ def _forget_application(context, key, record):
         ):
             records.pop(record["applicant_id"], None)
     context.bot_data.get("progress_state", {}).pop(key, None)
+    from bot.background_ocr import cancel_if_removed
+    cancel_if_removed(getattr(context, 'application', None), record.get('code'), record['applicant_id'])
     for store in ("pending_comments", "pending_user_replies", "operator_message_links"):
         entries = context.bot_data.get(store, {})
         for entry_key, target in list(entries.items()):
@@ -583,6 +585,15 @@ async def _archive_reconstructed_albums(
 
 
 async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot.background_ocr import control_lock
+    query = update.callback_query
+    if query and query.message and update.effective_chat:
+        async with control_lock(update.effective_chat.id, query.message.message_id):
+            return await _on_operator_button(update, context)
+    return await _on_operator_button(update, context)
+
+
+async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query or not query.data or not query.message:
         return

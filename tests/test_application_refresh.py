@@ -115,7 +115,7 @@ class ApplicationRefreshTests(unittest.IsolatedAsyncioTestCase):
         info=ctx.bot.send_message.await_args.kwargs['text']
         code=ctx.user_data['_application_code']
         self.assertIn('Ali',info)
-        self.assertIn('AI SUMMARY',info)
+        self.assertIn('Operator hujjatlarni hoziroq',info)
         self.assertIn(code,info)
         album=ctx.bot.send_media_group.await_args_list[0].kwargs['media'][0]
         self.assertIn(code,album.caption)

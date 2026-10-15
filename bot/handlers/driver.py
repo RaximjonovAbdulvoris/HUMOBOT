@@ -21,7 +21,8 @@ from telegram.ext import (
 )
 
 from bot.config import template_path
-from bot.document_ocr import prepare_document_summary
+from bot.document_ocr import prepare_document_summary, SOURCES, enabled
+from bot.background_ocr import PENDING_TEXT, schedule_ocr
 from bot.application_ids import application_code
 from bot.presentation import send_brand_sticker, with_keyboard_fallback
 from bot.counter import next_index
@@ -530,8 +531,7 @@ async def get_car_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["user_full_name"] = user.full_name or ""
 
     await update.message.reply_text(
-        "⏳ Hujjatlaringiz mahalliy AI yordamida tekshirilmoqda. Bu bir necha daqiqa "
-        "davom etishi mumkin. Ariza yuborilishini kuting — qayta yuborish shart emas."
+        "⏳ Arizangiz operatorga yuborilmoqda. AI tekshiruvi keyin davom etadi."
     )
     try:
         await _send_to_driver_group(context)
@@ -600,18 +600,18 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
     )
 
     code = application_code(d)
-    document_summary = await prepare_document_summary(context)
+    document_summary = PENDING_TEXT if enabled() else "AI o‘chirilgan. Hujjatlarni qo‘lda tekshiring."
 
-    details = (
+    prefix = (
         f"<b>WB HUMO · HAYDOVCHI ARIZASI</b>\n"
         f"Ariza: <code>{code}</code> · {h(region_name(region))}\n\n"
         f"<b>Arizachi</b>\n{user_link_html}\n"
         f"F.I.Sh.: {h(str(d.get('name', '-'))[:160])}\n"
         f"Telefon: <code>{h(str(d.get('phone', '-'))[:40])}</code>\n"
         f"Davlat raqami: <code>{h(str(d.get('car_plate', '-'))[:30])}</code>\n\n"
-        f"{document_summary}\n\n"
-        "<b>Operator boshqaruvi</b>\nQuyidagi amallardan birini tanlang."
     )
+    suffix = "\n\n<b>Operator boshqaruvi</b>\nQuyidagi amallardan birini tanlang."
+    details = prefix + document_summary + suffix
     caption_main = f"📎 <b>{code}</b> · Hujjatlar va avtomobil · 1/2"
     caption_selfie = f"📎 <b>{code}</b> · Selfie va litsenziya · 2/2"
 
@@ -708,7 +708,7 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
             )
             dispatch["kb_msg_id"] = kb_msg.message_id
 
-        register_application(
+        record_key = register_application(
             context,
             applicant_id=user_id,
             region=region,
@@ -721,6 +721,17 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
             media_albums=media_albums,
             code=code,
         )
+
+        if enabled():
+            record = context.bot_data['applications'][record_key]
+            record.update(ocr_status='pending', ocr_prefix=prefix, ocr_suffix=suffix,
+                          ocr_input={source: d[source] for source in SOURCES if d.get(source)})
+            application = getattr(context, 'application', None)
+            # Durable inputs belong to this application, never the user's next form.
+            if application is not None:
+                from bot.queue_moves import checkpoint
+                await checkpoint(context)
+                schedule_ocr(application, code, user_id)
 
     logger.info("[driver] sent application to group #%s (%s)", idx + 1, chat_id)
 
