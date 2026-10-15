@@ -131,6 +131,8 @@ async def post_init(application) -> None:
         create_instruction_cards()
     except Exception:
         logger.warning("Instruction cards unavailable; text prompts will be used.")
+    from bot.presentation import load_emoji_packs
+    await load_emoji_packs(application)
     await remove_legacy_brand_keyboards(application)
     await refresh_driver_keyboards(application)
     await warmup_templates(application)

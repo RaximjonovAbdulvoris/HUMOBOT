@@ -7,8 +7,8 @@ Telegram bot for WB HUMO taxi applications in Tashkent and Namangan.
 - Regional driver, branding and Spectre application routing.
 - Driver application albums: ten document/car photos, then selfie and licence.
 - Administrator controls: Ready, Progress, Incomplete photos, Other park, Delete.
-- Ready archives the application before deleting originals. The two notices send
-  prepared applicant messages and keep the application in its operator group.
+- Ready archives the application before deleting originals. The two review actions move the full application to their separate review
+  groups and send a prepared applicant notice after source cleanup.
 - CodeCraft vision extraction of PINFL, birth date/place, driving licence number
   and expiry, vehicle registration certificate serial/number. Extracted values
   are copyable and require verification against the original documents.
@@ -62,7 +62,7 @@ CODECRAFT_VISION_MODEL=gpt-5.6-luna
 
 Run `venv/bin/python scripts/run_test_bot.py`. Add `--check` for read-only
 preflight. Both regions route only to the test groups; subscription gates are
-bypassed and archives are disabled. Test state is isolated in `.test-bot-state`.
+bypassed. Set `ARCHIVE_GROUP` in `.env.test` to enable Ready/archive actions. Test state is isolated in `.test-bot-state`.
 This command alone is a foreground process, not a hosted deployment.
 
 ## Validation
@@ -71,7 +71,7 @@ This command alone is a foreground process, not a hosted deployment.
 venv/bin/python -m unittest discover -s tests -v
 ```
 
-86 offline tests cover regional routing, operator actions, archive safety,
+113 offline tests cover regional routing, operator actions, archive safety,
 submission retries and mocked OCR requests. Live CodeCraft authentication and
 OCR accuracy remain unverified: its endpoint blocked the review environment.
 
@@ -96,9 +96,10 @@ the stored state.
 Set `INCOMPLETE_GROUP` and `OTHER_PARK_GROUP` to separate negative Telegram chat
 IDs. City-specific overrides (`TASHKENT_INCOMPLETE_GROUP`, etc.) are supported.
 On a button press, the full application albums and information card are copied
-to the queue without active operator buttons; the applicant is notified only
-after the copy is confirmed. The source application remains in the operator
-group. Checkpoints prevent repeating confirmed copies on notification retry.
+to the queue with only Ready, Delete and reversible Progress buttons. A new
+source record is saved with confirmed destination photo/message IDs before
+originals are deleted. The applicant is notified after the move is finished.
+Checkpoints prevent repeating confirmed copies when deletion is retried.
 Missing routes block the operation with an actionable operator message.
 
 `python scripts/run_test_bot.py` loads these global queue IDs and premium asset
@@ -123,3 +124,48 @@ Provider HTTP status is logged without document text or credentials. Vision
 requests have a 60-second read timeout and 150-second overall bound; the user
 gets a waiting message. Real-world reading accuracy still needs a test on the
 server with clear certificate photos; normalized values must be checked.
+
+
+## Review moves and supplied emoji sets
+
+Configure the isolated test runner with the user-provided review groups:
+`INCOMPLETE_GROUP` and `OTHER_PARK_GROUP` from the private `.env.test` file.
+Group identifiers are deliberately excluded from public source code. Make the test bot an
+administrator with message-deletion rights in both groups. An optional
+`ARCHIVE_GROUP` in `.env.test` is used for both cities' archive destinations;
+there is deliberately no guessed archive destination.
+
+Both review groups show exactly Ready, Delete, and red/yellow Progress. Ready
+archives from the current review group, then removes its photos and controls.
+Delete removes only that review application's messages, without archiving.
+Application references and the originally selected city survive every move.
+The old operator group can no longer control a successfully moved application.
+
+If deleting original messages fails, the destination remains registered and
+original controls are kept for retry. Pressing the original move button or a
+control in the destination resumes cleanup without copying confirmed media a
+second time. Failure to flush persistence blocks source deletion. A queue
+copy with incomplete/unknown destination IDs also cannot trigger deletion.
+Source/archive cleanup keeps the control message until its photos are removed.
+
+At startup, actual custom emoji IDs are fetched from `ApplicationEmoji`,
+`FinanceEmoji`, `TONEmoji`, and `NewsEmoji`. IDs are chosen by matching symbols
+and fall back to the requested set if no matching symbol is available. The
+results are cached in bot persistence. Explicit `PREMIUM_ICON_*` values still
+override automatic choices. Unavailable sets fall back to cached/standard emoji;
+a Telegram rejection of custom icons retries with ordinary working controls.
+These links identify custom emoji sets, not standalone sticker packs.
+
+Server update for the existing test service:
+
+```sh
+cd /root/HUMOBOT
+git pull --ff-only
+venv/bin/pip install -r requirements.txt
+venv/bin/python scripts/run_test_bot.py --check
+systemctl restart humobot-test
+journalctl -u humobot-test -n 30 --no-pager
+```
+
+Set `ARCHIVE_GROUP` before testing Ready. Never run a second polling process
+alongside the systemd service; `--check` only performs read-only checks.

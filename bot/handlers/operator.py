@@ -6,7 +6,6 @@ application: one applicant can have more than one regional application at the
 same time.
 """
 import logging
-import re
 from html import escape as h
 
 from telegram import InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -14,9 +13,7 @@ from telegram.error import BadRequest
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.regions import archive_group, region_name
-from bot.route_settings import destination as queue_destination
 from bot.presentation import button as styled_button, with_keyboard_fallback
-from bot.application_ids import application_code
 from bot.brand_cleanup import is_plain_application_message, remove_buttons_command
 
 logger = logging.getLogger(__name__)
@@ -26,8 +23,9 @@ logger = logging.getLogger(__name__)
 _ARCHIVES_IN_FLIGHT: set[tuple[int, int]] = set()
 
 READY_TEXT = (
-    "✅ <b>WB HUMO arizangiz muvaffaqiyatli qabul qilindi!</b>\n\n"
-    "📞 Tez orada operatorlarimiz siz bilan bog‘lanishadi."
+    "✅ <b>Arizangiz bo‘yicha ish yakunlandi</b>\n\n"
+    "Murojaatingiz operator tomonidan ko‘rib chiqildi va yakunlandi.\n"
+    "Savollar uchun: +998 78 113-80-81."
 )
 
 
@@ -53,18 +51,19 @@ OTHER_PARK_TEXT = (
 
 
 def build_operator_keyboard(
-    applicant_user_id: int, in_progress: bool = False
+    applicant_user_id: int, in_progress: bool = False, review: bool = False
 ) -> InlineKeyboardMarkup:
     def button(label, action):
         style = {"ready": "success", "delete": "danger"}.get(action, "primary")
         return styled_button(label, action=f"op:{action}:{applicant_user_id}",
                              style=style, icon=action.upper())
-    return InlineKeyboardMarkup([
-        [button("✅ Tayyor", "ready"),
-         button("Jarayonda🟡" if in_progress else "Jarayonda🔴", "progress")],
-        [button("📷 Chala rasm", "incomplete"), button("🚕 Boshqa park", "otherpark")],
-        [button("🗑 O‘chirish", "delete")],
-    ])
+    rows = [[button("✅ Tayyor", "ready"),
+             button("Jarayonda🟡" if in_progress else "Jarayonda🔴", "progress")]]
+    if not review:
+        rows.append([button("📷 Chala rasm", "incomplete"), button("🚕 Boshqa park", "otherpark")])
+    rows.append([button("🗑 O‘chirish", "delete")])
+    return InlineKeyboardMarkup(rows)
+
 
 
 def _comment_only_keyboard(applicant_user_id: int):
@@ -91,7 +90,8 @@ async def refresh_driver_keyboards(application) -> None:
                 await with_keyboard_fallback(application.bot.edit_message_reply_markup,
                     chat_id=chat_id, message_id=message_id,
                     reply_markup=build_operator_keyboard(
-                        user_id, application.bot_data.get("progress_state", {}).get(key, False)
+                        user_id, application.bot_data.get("progress_state", {}).get(key, False),
+                        review=bool(record.get("queue_kind"))
                     ),
                 )
             except BadRequest as error:
@@ -397,6 +397,9 @@ async def _archive_application_locked(bot, record: dict, destination: str) -> bo
                             len(pending_ids),
                         )
                     else:
+                        state['destination_photo_ids'] = [
+                            getattr(item, 'message_id', None) for item in result
+                        ]
                         for message_id in pending_ids:
                             copied_photos[str(message_id)] = True
                 except Exception as error:
@@ -407,15 +410,16 @@ async def _archive_application_locked(bot, record: dict, destination: str) -> bo
 
         if not state.get("kb"):
             try:
-                copied = await bot.copy_message(
+                copied = await with_keyboard_fallback(bot.copy_message,
                     chat_id=destination,
                     from_chat_id=source,
                     message_id=record["kb_msg_id"],
-                    reply_markup=InlineKeyboardMarkup([]),
+                    reply_markup=record.get("_copy_markup", InlineKeyboardMarkup([])),
                 )
                 if copied is None:
                     raise RuntimeError("Telegram did not confirm the keyboard copy")
                 state["kb"] = True
+                state["destination_kb_id"] = getattr(copied, "message_id", None)
             except Exception as error:
                 failed = True
                 logger.warning("archive: keyboard message failed: %s", error)
@@ -538,8 +542,11 @@ async def _archive_reconstructed_albums(
                         )
                         failed = True
                         continue
+                message_ids = ([getattr(sent, 'message_id', None)] if len(chunk) == 1
+                               else [getattr(item, 'message_id', None) for item in sent])
                 checkpoint.clear()
                 checkpoint["status"] = "complete"
+                checkpoint["message_ids"] = message_ids
             except Exception as error:
                 # Exceptions have no successful Bot API response and remain
                 # retryable.  A malformed successful response above does not.
@@ -550,15 +557,16 @@ async def _archive_reconstructed_albums(
 
     if not state.get("kb"):
         try:
-            copied = await bot.copy_message(
+            copied = await with_keyboard_fallback(bot.copy_message,
                 chat_id=destination,
                 from_chat_id=record["group_chat_id"],
                 message_id=record["kb_msg_id"],
-                reply_markup=InlineKeyboardMarkup([]),
+                reply_markup=record.get("_copy_markup", InlineKeyboardMarkup([])),
             )
             if copied is None:
                 raise RuntimeError("Telegram did not confirm the keyboard copy")
             state["kb"] = True
+            state["destination_kb_id"] = getattr(copied, "message_id", None)
         except Exception as error:
             failed = True
             logger.warning("archive: keyboard message failed: %s", error)
@@ -646,53 +654,27 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.message.reply_text("Bu tugmalar faqat guruh administratorlari uchun.")
         return
 
+    if resolved is not None:
+        key, record = resolved
+        if record.get('transfer_source_key'):
+            from bot.queue_moves import finish_source_cleanup
+            if not await finish_source_cleanup(context, record):
+                await query.message.reply_text("Asl guruhdagi arizani tozalash tugamadi. Botning o‘chirish huquqini tekshiring va qayta bosing.")
+                return
+        transfer = record.get('_transfer')
+        if transfer and action != transfer['action']:
+            await query.message.reply_text("Ariza boshqa guruhga ko‘chirilmoqda. Ko‘chirish tugmasini qayta bosing.")
+            return
+
     if action in ("incomplete", "otherpark"):
         key, record = resolved
-        notices = record.setdefault("sent_notices", {})
-        if notices.get(action) and record.get("queue_forwarded", {}).get(action):
-            await query.message.reply_text("Bu xabar arizachiga avval yuborilgan.")
+        if record.get('queue_kind'):
+            await query.message.reply_text("Bu guruhda Tayyor, O‘chirish va Jarayonda amallari mavjud.")
             return
-        label = "Chala rasm" if action == "incomplete" else "Boshqa park"
-        route_key = "INCOMPLETE_GROUP" if action == "incomplete" else "OTHER_PARK_GROUP"
-        queue = record.get("queue_destinations", {}).get(action) or queue_destination(f"{record.get('region', '').upper()}_{route_key}") or queue_destination(route_key)
-        if not re.fullmatch(r'-[1-9][0-9]*', str(queue)):
-            await query.message.reply_text(
-                f"⚠️ «{label}» guruhi sozlanmagan. Guruh ID sini {route_key} ga kiriting. "
-                "Ariza o‘z joyida qoldi; arizachiga xabar yuborilmadi."
-            )
-            return
-        if str(queue) == str(record['group_chat_id']):
-            await query.message.reply_text("Qabul qiluvchi guruh operator guruhidan alohida bo‘lishi kerak.")
-            return
-        states = record.setdefault('queue_states', {})
-        queue_state = states.setdefault(action, {'photos': {}, 'kb': False})
-        # Pin the queue once a copy begins, even if configuration changes later.
-        pinned = record.setdefault('queue_destinations', {}).setdefault(action, str(queue))
-        shadow = dict(record, archive_state=queue_state)
-        if not await _archive_application(context.bot, shadow, pinned):
-            await query.message.reply_text(
-                f"⚠️ Ariza «{label}» guruhiga to‘liq yuborilmadi. "
-                "Asl ariza saqlandi; arizachiga xabar yuborilmadi."
-            )
-            return
-        record.setdefault("queue_forwarded", {})[action] = True
-        if notices.get(action):
-            await query.message.reply_text(f"✅ Ariza «{label}» guruhiga yuborildi. Xabar arizachiga avval yuborilgan.")
-            return
-        text = INCOMPLETE_TEXT if action == "incomplete" else OTHER_PARK_TEXT
-        try:
-            await context.bot.send_message(
-                chat_id=record["applicant_id"],
-                text=text + f"\n\n📍 {h(_branch(record))}\nAriza: <code>{h(record.get('code') or 'Eski ariza')}</code>", parse_mode="HTML",
-            )
-        except Exception:
-            await query.message.reply_text(
-                "⚠️ Xabar yuborilgani tasdiqlanmadi. Foydalanuvchi botni bloklagan "
-                "bo‘lishi yoki aloqa uzilgan bo‘lishi mumkin. Ariza o‘chirilmadi."
-            )
-            return
-        notices[action] = True
-        await query.message.reply_text(f"✅ Ariza «{label}» guruhiga va xabar arizachiga yuborildi. Asl ariza saqlandi.")
+        from bot.queue_moves import move_to_review
+        result, detail = await move_to_review(context, key, record, action)
+        if not result:
+            await query.message.reply_text(detail)
         return
 
     if action == "delete":
@@ -745,45 +727,25 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
             return
 
+        from bot.queue_moves import checkpoint
+        if not await checkpoint(context):
+            await query.message.reply_text("Arxiv nusxasi yaratildi, lekin holatni saqlab bo‘lmadi. Asl ariza o‘chirilmadi.")
+            return
+        if not await _delete_operator_application(context, key, record):
+            await query.message.reply_text(
+                "✅ Arxiv nusxasi tayyor. Ayrim asl xabarlarni o‘chirib bo‘lmadi. "
+                "Bot ruxsatlarini tekshirib «Tayyor»ni qayta bosing."
+            )
+            return
+        await checkpoint(context)
         try:
             await context.bot.send_message(
                 chat_id=applicant_id,
                 text=READY_TEXT + f"\n📍 <b>{h(_branch(record))}</b>\nAriza: <code>{h(record.get('code') or 'Eski ariza')}</code>",
                 parse_mode="HTML",
             )
-        except Exception as error:
-            logger.warning("ready: could not notify applicant %s: %s", applicant_id, error)
-
-        delete_failed = False
-        for message_id in record.get("photo_msg_ids", []):
-            try:
-                await context.bot.delete_message(
-                    chat_id=record["group_chat_id"], message_id=message_id
-                )
-            except Exception as error:
-                delete_failed = True
-                logger.warning("ready: could not delete photo %s: %s", message_id, error)
-        try:
-            await query.delete_message()
         except Exception:
-            try:
-                await context.bot.delete_message(
-                    chat_id=record["group_chat_id"], message_id=record["kb_msg_id"]
-                )
-            except Exception:
-                delete_failed = True
-
-        if not delete_failed:
-            context.bot_data.get("applications", {}).pop(key, None)
-            # Do not remove a legacy applicant entry belonging to another
-            # application; remove only this exact identity alias.
-            context.bot_data.get("app_messages", {}).pop(key, None)
-            context.bot_data.get("progress_state", {}).pop(key, None)
-        else:
-            await query.message.reply_text(
-                "✅ Arxivlandi, ammo ayrim asl xabarlarni o‘chirishda xatolik "
-                "bo‘ldi. Ular saqlab qolindi."
-            )
+            logger.warning("ready: applicant notification could not be delivered")
         return
 
     if action == "progress":
@@ -792,7 +754,7 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         new_state = not progress_state.get(key, False)
         try:
             await with_keyboard_fallback(query.edit_message_reply_markup,
-                reply_markup=build_operator_keyboard(applicant_id, in_progress=new_state)
+                reply_markup=build_operator_keyboard(applicant_id, in_progress=new_state, review=bool(record.get("queue_kind")))
             )
         except Exception:
             logger.warning("progress: could not update keyboard for %s", key)
@@ -809,7 +771,7 @@ async def on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if resolved:
             key, record = resolved
             markup = (build_operator_keyboard(
-                applicant_id, context.bot_data.get("progress_state", {}).get(key, False)
+                applicant_id, context.bot_data.get("progress_state", {}).get(key, False), review=bool(record.get("queue_kind"))
             ) if query.message.message_id == record["kb_msg_id"] else None)
             await query.edit_message_reply_markup(reply_markup=markup)
         return

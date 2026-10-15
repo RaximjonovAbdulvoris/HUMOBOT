@@ -69,13 +69,13 @@ class FakeBot:
             if self.batch_result_count is None
             else self.batch_result_count
         )
-        return tuple(object() for _ in range(count))
+        return tuple(SimpleNamespace(message_id=1000+i) for i in range(count))
 
     async def copy_message(self, **kwargs):
         if kwargs["message_id"] in self.fail_ids:
             raise RuntimeError("copy failed")
         self.copies.append(kwargs)
-        return object()
+        return SimpleNamespace(message_id=2000)
 
     async def delete_message(self, **kwargs):
         self.deletes.append(kwargs)

@@ -154,7 +154,7 @@ was not verified: the CodeCraft endpoint returned Cloudflare 403 (1010) from the
 review environment. Check from the actual bot server before enabling in production.
 
 Operator controls now have Ready, Progress, Incomplete photos, Other park, Delete.
-The two notices notify the applicant and retain the original application; a
+The two review actions move the application to their configured review groups; a
 successfully sent notice is not repeated for the same application and notice type.
 Delete removes only stored source photo/control IDs, and retains the control
 message if a photo cannot be removed. All actions require a group administrator.
@@ -168,7 +168,9 @@ is retired; already pending conversations retain compatibility.
 `@testthumo_bot` identity and administrator/deletion access to the four provided
 test groups, and uses isolated `.test-bot-state` persistence. Both city menus
 route only to those test groups. Subscription checks are bypassed only by this
-test runner; archives are disabled until a separate archive group is provided.
+test runner; Ready/archive stays disabled until ARCHIVE_GROUP is provided in .env.test.
 `--check` performs read-only preflight and exits. Do not run a second instance
 while this token is already polling. This is a temporary test process, not a
 24/7 deployment. The normal production entry point remains `python -m bot.main`.
+
+Review queue moves now preserve confirmed destination IDs and expose Ready/Delete/Progress. The test runner uses the two user-provided review IDs and accepts ARCHIVE_GROUP. Emoji icons resolve from the four user-selected sets at startup. See README.md for recovery and setup.

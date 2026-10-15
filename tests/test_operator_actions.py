@@ -7,7 +7,7 @@ from bot.handlers import operator
 
 class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        patcher = patch("bot.handlers.operator.queue_destination", side_effect=lambda key: "-2001" if key.endswith("INCOMPLETE_GROUP") else "-2002")
+        patcher = patch("bot.queue_moves.destination", side_effect=lambda key: "-2001" if key.endswith("INCOMPLETE_GROUP") else "-2002")
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -24,7 +24,7 @@ class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({b.callback_data for b in buttons},
                          {f'op:{a}:9' for a in ('ready','progress','incomplete','otherpark','delete')})
 
-    async def test_notices_go_to_exact_applicant_once_without_deleting(self):
+    async def test_notice_follows_move_and_old_buttons_cannot_duplicate_it(self):
         for action in ('incomplete','otherpark'):
             bot,ctx,key,msg=self.setup_case()
             query=_update(f'op:{action}:9',msg)
@@ -34,15 +34,18 @@ class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(bot.sent[0]['chat_id'],9)
             self.assertIn('+998 78 113-80-81',bot.sent[0]['text'])
             self.assertIn('Toshkent shahri',bot.sent[0]['text'])
-            self.assertEqual(bot.deletes,[])
-            self.assertIn(key,ctx.bot_data['applications'])
+            self.assertEqual(len(bot.deletes),4)
+            self.assertNotIn(key,ctx.bot_data['applications'])
+            self.assertEqual(next(iter(ctx.bot_data['applications'].values()))['queue_kind'],action)
 
     async def test_failed_notice_retains_application_without_success_marker(self):
         bot,ctx,key,msg=self.setup_case()
         bot.send_message=AsyncMock(side_effect=Forbidden('blocked'))
         await operator.on_operator_button(_update('op:incomplete:9',msg),ctx)
-        self.assertFalse(ctx.bot_data['applications'][key]['sent_notices'])
-        self.assertEqual(bot.deletes,[])
+        self.assertNotIn(key,ctx.bot_data['applications'])
+        child=next(iter(ctx.bot_data['applications'].values()))
+        self.assertFalse(child['sent_notices'])
+        self.assertEqual(child['notification_status'],'failed')
 
     async def test_delete_removes_only_this_application_without_notifying_or_archiving(self):
         bot,ctx,key,msg=self.setup_case()

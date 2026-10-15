@@ -27,10 +27,10 @@ def configure():
         'CODECRAFT_API_KEY': values.get('CODECRAFT_API_KEY', ''),
         'CODECRAFT_VISION_MODEL': values.get('CODECRAFT_VISION_MODEL', 'gpt-5.6-luna'),
         'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
-        'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': '',
+        'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
         'TASHKENT_DRIVER_GROUP_1': '-5258426588', 'TASHKENT_DRIVER_GROUP_2': '-5468071353',
         'TASHKENT_BRAND_GROUP': '-5422883968', 'TASHKENT_SPECTRE_GROUP': '-5243428930',
-        'NAMANGAN_SPECTRE_GROUP': '-5243428930', 'TASHKENT_ARCHIVE_GROUP': '',
+        'NAMANGAN_SPECTRE_GROUP': '-5243428930', 'TASHKENT_ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
         'PERSIST_DIR': str(STATE), 'SUBSCRIPTION_CHANNEL_ID': '@WB_HUMO_TAXI',
     })
     for key in ("INCOMPLETE_GROUP", "OTHER_PARK_GROUP", "WELCOME_STICKER_ID", "SUCCESS_STICKER_ID"):
@@ -59,6 +59,13 @@ async def preflight():
         for chat, member in zip(chats, members):
             if member.status != 'administrator' or not member.can_delete_messages:
                 raise ValueError(f'Test bot needs admin/delete rights in {chat}')
+        optional = {os.environ.get(name, '') for name in ('INCOMPLETE_GROUP', 'OTHER_PARK_GROUP', 'ARCHIVE_GROUP')}
+        for chat in sorted(optional - {''}):
+            if not chat.startswith('-') or not chat[1:].isdigit():
+                raise ValueError('Invalid review/archive group ID')
+            member = await bot.get_chat_member(int(chat), me.id)
+            if member.status != 'administrator' or not member.can_delete_messages:
+                raise ValueError(f'Test bot needs admin/delete rights in {chat}')
         webhook = await bot.get_webhook_info()
         if webhook.url:
             raise ValueError('Test bot has an existing webhook; stop that instance first')
@@ -82,7 +89,7 @@ def main():
     subscription.DEFAULT_REQUIRED_CHATS = ()
     subscription.NAMANGAN_REQUIRED_CHATS = ()
     import bot.main as application
-    print('TEST MODE: four test groups; no archive; no subscription gate.', flush=True)
+    print('TEST MODE: fixed application groups, configured review/archive groups; no subscription gate.', flush=True)
     asyncio.set_event_loop(asyncio.new_event_loop())
     application.main()
     return 0

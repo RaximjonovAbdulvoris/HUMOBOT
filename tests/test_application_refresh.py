@@ -65,7 +65,7 @@ class ApplicationRefreshTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_queue_missing_never_notifies_or_deletes(self):
         bot,ctx,key,msg = self.application()
-        with patch('bot.handlers.operator.queue_destination', return_value=''):
+        with patch('bot.queue_moves.destination', return_value=''):
             await operator.on_operator_button(_update('op:incomplete:9',msg),ctx)
         self.assertEqual(bot.sent,[])
         self.assertEqual(bot.copies,[])
@@ -74,7 +74,7 @@ class ApplicationRefreshTests(unittest.IsolatedAsyncioTestCase):
     async def test_queue_failure_never_notifies_and_preserves_source(self):
         bot,ctx,key,msg = self.application()
         bot.batch_failures=1
-        with patch('bot.handlers.operator.queue_destination', return_value='-2001'):
+        with patch('bot.queue_moves.destination', return_value='-2001'):
             await operator.on_operator_button(_update('op:incomplete:9',msg),ctx)
         self.assertEqual(bot.sent,[])
         self.assertEqual(bot.deletes,[])
@@ -83,23 +83,26 @@ class ApplicationRefreshTests(unittest.IsolatedAsyncioTestCase):
     async def test_notice_retry_does_not_duplicate_queue_copies(self):
         bot,ctx,key,msg = self.application()
         bot.send_message=AsyncMock(side_effect=[RuntimeError('blocked'),N(message_id=100)])
-        with patch('bot.handlers.operator.queue_destination',return_value='-2001'):
+        with patch('bot.queue_moves.destination',return_value='-2001'):
             await operator.on_operator_button(_update('op:incomplete:9',msg),ctx)
             await operator.on_operator_button(_update('op:incomplete:9',msg),ctx)
         self.assertEqual(len(bot.batch_copies),1)
         self.assertEqual(len(bot.copies),1)
         self.assertEqual(bot.send_message.await_count,2)
-        self.assertEqual(bot.deletes,[])
-        self.assertTrue(ctx.bot_data['applications'][key]['sent_notices']['incomplete'])
+        self.assertEqual(len(bot.deletes),3)
+        self.assertNotIn(key,ctx.bot_data['applications'])
+        child=next(iter(ctx.bot_data['applications'].values()))
+        self.assertEqual(child['notification_status'],'failed')
 
     async def test_previous_notice_is_forwarded_without_notifying_again(self):
         bot,ctx,key,msg = self.application()
         ctx.bot_data['applications'][key]['sent_notices']={'otherpark':True}
-        with patch('bot.handlers.operator.queue_destination',return_value='-2002'):
+        with patch('bot.queue_moves.destination',return_value='-2002'):
             await operator.on_operator_button(_update('op:otherpark:9',msg),ctx)
         self.assertEqual(len(bot.batch_copies),1)
         self.assertEqual(bot.sent,[])
-        self.assertTrue(ctx.bot_data['applications'][key]['queue_forwarded']['otherpark'])
+        self.assertNotIn(key,ctx.bot_data['applications'])
+        self.assertEqual(next(iter(ctx.bot_data['applications'].values()))['queue_kind'],'otherpark')
 
     async def test_combined_card_and_album_share_number(self):
         ctx=context('tashkent')
