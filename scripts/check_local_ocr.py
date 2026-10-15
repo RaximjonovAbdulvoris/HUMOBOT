@@ -1,14 +1,13 @@
 """Offline-engine preflight; optional synthetic image test, never uses Telegram."""
 import argparse
 import asyncio
-import base64
 from io import BytesIO
 from pathlib import Path
 import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bot.document_ocr import check_local_engine, local_client, local_model, read_local
+from bot.document_ocr import check_local_engine, local_client, local_model, read_local, prepare_images
 
 
 async def check(smoke):
@@ -25,7 +24,7 @@ async def check(smoke):
             image.save(buffer, 'JPEG', quality=95)
             started = time.monotonic()
             result = await read_local(client, model,
-                [base64.b64encode(buffer.getvalue()).decode('ascii')], ('pinfl',), ('synthetic_test',))
+                prepare_images(buffer.getvalue()), ('pinfl',), ('synthetic_test',))
             if result.get('pinfl') != '12345678901234':
                 raise ValueError('Synthetic image reading did not match; do not enable OCR yet')
             print(f'Synthetic image read correctly in {time.monotonic() - started:.1f}s. '

@@ -36,7 +36,7 @@ Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 LimitCORE=0
 Nice=10
-CPUQuota=200%
+CPUQuota=300%
 MemoryHigh=6G
 MemoryMax=7G
 EOF

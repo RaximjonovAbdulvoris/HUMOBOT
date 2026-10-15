@@ -74,7 +74,9 @@ class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(request.url), 'http://127.0.0.1:11434/api/chat')
             self.assertNotIn('authorization', request.headers)
             body = json.loads(request.content)
-            self.assertEqual(body['format'], 'json')
+            self.assertEqual(body['format']['required'], list(ocr.SOURCES['passport_front']))
+            self.assertFalse(body['format']['additionalProperties'])
+            self.assertEqual(body['options']['num_predict'], 384)
             self.assertIs(body['stream'], False)
             self.assertEqual(len(body['messages'][1]['images']), 1)
             self.assertNotIn('api.telegram.org', request.content.decode())
@@ -205,3 +207,35 @@ class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
             result = await ocr.extract_documents(N(), {'passport_front': 'a', 'tech_front': 'b'})
         self.assertEqual(result['values']['pinfl'], '12345678901234')
         self.assertEqual(result['failed_sources'], ['tech_front'])
+
+    def test_preprocessing_trims_white_margins_without_clipping_ink(self):
+        import base64
+        from io import BytesIO
+        from PIL import Image, ImageDraw
+        image = Image.new('RGB', (1800, 1000), 'white')
+        ImageDraw.Draw(image).rectangle((500, 400, 1200, 600), fill='black')
+        buffer = BytesIO()
+        image.save(buffer, 'PNG')
+        processed = Image.open(BytesIO(base64.b64decode(ocr.prepare_images(buffer.getvalue())[0])))
+        self.assertLess(processed.width, 1800)
+        self.assertLess(processed.height, 1000)
+        self.assertGreater(processed.width, 700)
+        self.assertGreater(processed.height, 200)
+        self.assertLess(processed.convert('L').getpixel((processed.width // 2, processed.height // 2)), 10)
+
+    def test_dark_background_keeps_frame_and_limits_size(self):
+        import base64
+        from io import BytesIO
+        from PIL import Image
+        image = Image.new('RGB', (3000, 2000), (100, 120, 140))
+        buffer = BytesIO()
+        image.save(buffer, 'JPEG')
+        processed = Image.open(BytesIO(base64.b64decode(ocr.prepare_images(buffer.getvalue())[0])))
+        self.assertEqual(processed.size, (1280, 853))
+        self.assertFalse(processed.getexif())
+
+    def test_short_prompt_preserves_document_specific_rules(self):
+        prompt = ocr.field_prompt(('license_expiry',))
+        self.assertIn('4b', prompt)
+        self.assertIn('not issue/category', prompt)
+        self.assertNotIn('vehicle_registration:', prompt)
