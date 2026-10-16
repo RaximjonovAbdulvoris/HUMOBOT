@@ -725,7 +725,8 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
         if enabled():
             record = context.bot_data['applications'][record_key]
             record.update(ocr_status='pending', ocr_prefix=prefix, ocr_suffix=suffix,
-                          ocr_input={source: d[source] for source in SOURCES if d.get(source)})
+                          ocr_input={**{source: d[source] for source in SOURCES if d.get(source)},
+                                     'car_plate': d.get('car_plate', '')})
             application = getattr(context, 'application', None)
             # Durable inputs belong to this application, never the user's next form.
             if application is not None:

@@ -62,6 +62,26 @@ def normalize(raw):
     return result
 
 
+def vehicle_plate(value):
+    """Canonical comparison only; do not repair ambiguous OCR characters."""
+    return re.sub(r'[^A-Z0-9]', '', str(value or '').upper())
+
+
+def guard_identifiers(values, car_plate=None):
+    result = dict(values)
+    rejected = []
+    known_plate = vehicle_plate(car_plate)
+    for field in ('vehicle_registration', 'license_number'):
+        value = vehicle_plate(result.get(field))
+        # Recognize common Uzbekistan private/company plate layouts. A matching
+        # applicant-entered plate is also rejected even outside these layouts.
+        looks_like_plate = re.fullmatch(r'(?:[0-9]{2}[A-Z][0-9]{3}[A-Z]{2}|[0-9]{5}[A-Z]{3})', value)
+        if value and (looks_like_plate or (known_plate and value == known_plate)):
+            result[field] = None
+            rejected.append(field)
+    return result, rejected
+
+
 def prepare_images(raw, max_side=1280):
     """Strip metadata and create readable views in RAM; never write documents to disk."""
     with Image.open(BytesIO(raw)) as original:
@@ -227,15 +247,21 @@ async def extract_documents(bot, data):
     for group, result in zip(groups, results):
         if isinstance(result, BaseException):
             failed.extend(group)
-            logger.warning('Local document extraction failed (%s)', type(result).__name__)
+            logger.warning('Local document extraction failed: sources=%s, error=%s',
+                           ','.join(group), type(result).__name__)
             continue
+        logger.info('Local OCR completed: sources=%s, readable_fields=%s',
+                    ','.join(group), ','.join(field for field, value in result.items() if value))
         for field, value in result.items():
             if field in candidates and value:
                 candidates[field].add(value)
     values = {field: next(iter(items)) if len(items) == 1 else None
               for field, items in candidates.items()}
+    conflicts = [field for field, items in candidates.items() if len(items) > 1]
+    values, rejected = guard_identifiers(values, data.get('car_plate'))
     return {'status': 'complete' if all(values.values()) and not failed else 'partial',
-            'values': values, 'failed_sources': failed, 'backend': 'local'}
+            'values': values, 'failed_sources': failed, 'backend': 'local',
+            'conflicting_fields': conflicts, 'rejected_fields': rejected}
 
 
 async def prepare_document_summary(context):
@@ -259,6 +285,13 @@ def format_summary(result):
     values = result.get('values', {})
     for field, label in FIELDS.items():
         value = values.get(field)
-        text = f'<code>{escape(value)}</code>' if value else '⚠️ Aniqlanmadi — tekshiring'
+        if value:
+            text = f'<code>{escape(value)}</code>'
+        elif field in result.get('rejected_fields', []):
+            text = '⚠️ Davlat raqami bilan chalkashdi — qo‘lda tekshiring'
+        elif field in result.get('conflicting_fields', []):
+            text = '⚠️ O‘qish natijalari farq qildi — qo‘lda tekshiring'
+        else:
+            text = '⚠️ Aniqlanmadi — tekshiring'
         lines.append(f'{label}: {text}')
     return '\n'.join(lines)

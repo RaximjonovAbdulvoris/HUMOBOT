@@ -239,3 +239,22 @@ class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('4b', prompt)
         self.assertIn('not issue/category', prompt)
         self.assertNotIn('vehicle_registration:', prompt)
+
+    def test_vehicle_plate_never_becomes_certificate_number(self):
+        for value in ('01A123BC', '01 123 ABC', 'AA-TEST'):
+            values, rejected = ocr.guard_identifiers({'vehicle_registration': value}, value)
+            self.assertIsNone(values['vehicle_registration'])
+            self.assertIn('vehicle_registration', rejected)
+        values, rejected = ocr.guard_identifiers({'vehicle_registration': 'ABC0012345'})
+        self.assertEqual(values['vehicle_registration'], 'ABC0012345')
+        self.assertEqual(rejected, [])
+
+    def test_rejected_number_explains_manual_review(self):
+        text = ocr.format_summary({'status': 'partial', 'values': {},
+            'rejected_fields': ['vehicle_registration']})
+        self.assertIn('Davlat raqami bilan chalkashdi', text)
+
+    def test_plate_pattern_rejected_without_form_plate(self):
+        for field in ('vehicle_registration', 'license_number'):
+            values, _ = ocr.guard_identifiers({field: '01A123BC'})
+            self.assertIsNone(values[field])
