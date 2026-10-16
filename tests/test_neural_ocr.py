@@ -115,3 +115,31 @@ class LicenceBirthRefinementTests(unittest.TestCase):
         self.assertEqual(result['birth_date'], '01.02.1990')
         uncertain = Mock(side_effect=[([('TEST CITY', .96)], None)] * 3 + [([('O1021990', .96)], None)] * 3)
         self.assertIsNone(refine_birth(uncertain, image, field)['birth_date'])
+
+class LicenceOrientationTests(unittest.TestCase):
+    def test_vertical_lines_request_quarter_turn(self):
+        from bot.neural_ocr_worker import orientation_hint
+        rows = [([[x, 100], [x + 20, 100], [x + 20, 300], [x, 300]], '4d12345678901234', .99)
+                for x in (100, 150, 200)]
+        self.assertEqual(orientation_hint(rows), 90)
+
+    def test_upside_down_numbered_rows_and_upright_rows(self):
+        from bot.neural_ocr_worker import orientation_hint
+        def detected(text, y):
+            return ([[100, y], [300, y], [300, y + 25], [100, y + 25]], text, .99)
+        upright = [detected('1SURNAME', 100), detected('2GIVEN', 140), detected('3. TEST CITY 01.02.1990', 180)]
+        self.assertEqual(orientation_hint(upright), 0)
+        upside_down = [detected('1SURNAME', 300), detected('2GIVEN', 250), detected('3. TEST CITY 01.02.1990', 200)]
+        self.assertEqual(orientation_hint(upside_down), 180)
+
+    def test_joined_name_labels_are_supported(self):
+        from bot.neural_ocr_worker import licence_name
+        self.assertEqual(licence_name([row('1EXAMPLE', x=320, y=100, height=28),
+            row('2PERSON', x=320, y=130, height=28)]), 'EXAMPLE PERSON')
+
+class PlaceFormattingTests(unittest.TestCase):
+    def test_only_printed_suffix_boundary_is_restored(self):
+        from bot.neural_ocr_worker import clean_place
+        self.assertEqual(clean_place('TESTTUMANI'), 'TEST TUMANI')
+        self.assertEqual(clean_place('TEST TUMANI'), 'TEST TUMANI')
+        self.assertEqual(clean_place('TEST TUMNI'), 'TEST TUMNI')

@@ -30,7 +30,7 @@ def fields_from_rows(rows, source, width, height):
             birth = re.fullmatch(r'3[.)]?\s*(.+?)\s*' + DATE, text)
             if birth:
                 add('birth_date', '.'.join(birth.groups()[1:]))
-                add('birth_place', birth[1])
+                add('birth_place', clean_place(birth[1]) or '')
             expiry = re.search(r'4\s*[bвб][.)]?\s*' + DATE, text, re.I)
             if expiry:
                 add('license_expiry', '.'.join(expiry.groups()))
@@ -61,16 +61,25 @@ def clean_name(text):
     return text
 
 
+def clean_place(text):
+    value = clean_name(text)
+    if value:
+        # Restore only a word boundary before a printed administrative suffix.
+        # Do not complete, substitute, or spell-correct geographic names.
+        value = re.sub(r'(?<=[A-Z])\s*(TUMANI|SHAHRI|VILOYATI|RESPUBLIKASI)$', r' \1', value)
+    return value
+
+
 def licence_name(words):
     # Numbered field 2 anchors the given name. Require one surname directly above,
     # aligned with it; do not pick the decorative region list at the card's right.
     anchors = [w for w in words if w.confidence >= 95 and re.fullmatch(r'2[.)]?', w.text)]
     if len(anchors) != 1:
-        combined = [w for w in words if w.confidence >= 95 and re.match(r'^2[.)]\s*[^\W\d_]', w.text)]
+        combined = [w for w in words if w.confidence >= 95 and re.match(r'^2[.)]?\s*[^\W\d_]', w.text)]
         if len(combined) != 1:
             return None
         given = combined[0]
-        name = clean_name(re.sub(r'^2[.)]\s*', '', given.text))
+        name = clean_name(re.sub(r'^2[.)]?\s*', '', given.text))
     else:
         anchor = anchors[0]
         candidates = [w for w in words if w.confidence >= 95 and clean_name(w.text)
@@ -80,11 +89,12 @@ def licence_name(words):
             return None
         given = candidates[0]
         name = clean_name(given.text)
-    surnames = [w for w in words if w.confidence >= 95 and clean_name(w.text)
+    surname_text = lambda w: clean_name(re.sub(r'^1[.)]?\s*', '', w.text))
+    surnames = [w for w in words if w.confidence >= 95 and surname_text(w)
         and .6 * given.height < given.top - w.top < 1.8 * given.height
         and abs(w.left - given.left) < given.height * .5]
     if name and len(surnames) == 1:
-        return clean_name(surnames[0].text + ' ' + name)
+        return clean_name(surname_text(surnames[0]) + ' ' + name)
     return None
 
 
@@ -123,10 +133,34 @@ def refine_birth(engine, image, word):
                 value = normalize({'birth_date': digits[:2]+'.'+digits[2:4]+'.'+digits[4:]})['birth_date'] if re.fullmatch(r'[0-9]{8}', digits) else None
                 readings.append(value if confidence >= .90 else None)
             else:
-                value = clean_name(text)
+                value = clean_place(text)
                 readings.append(value if confidence >= .85 else None)
         result[key] = unanimous(readings)
     return result
+
+
+def orientation_hint(result):
+    """Infer page rotation from detected text geometry, not phone EXIF alone."""
+    from statistics import median
+    tall = wide = 0
+    ranks = {}
+    for box, text, confidence in result or []:
+        x = [point[0] for point in box]
+        y = [point[1] for point in box]
+        width, height = max(x) - min(x), max(y) - min(y)
+        if len(text) >= 6 and confidence >= .6:
+            tall += height > width * 1.5
+            wide += width > height * 1.5
+        match = re.match(r'^([1-5])(?:[a-d])?(?:[.)]|\s|(?=[A-Z]))', text, re.I)
+        if match and confidence >= .85:
+            ranks.setdefault(int(match[1]), []).append(sum(y) / len(y))
+    if tall >= 3 and tall > wide * 1.5:
+        return 90
+    ordered = [(rank, median(centers)) for rank, centers in sorted(ranks.items())]
+    inversions = sum(a[1] > b[1] for a, b in zip(ordered, ordered[1:]))
+    if len(ordered) >= 3 and inversions >= 2 and inversions == len(ordered) - 1:
+        return 180
+    return 0
 
 
 def read_document(engine, raw, source):
@@ -137,6 +171,13 @@ def read_document(engine, raw, source):
         image = ImageOps.exif_transpose(opened).convert('RGB')
     image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     result, _ = engine(np.array(ImageOps.invert(image))[:, :, ::-1].copy())
+    if source == 'license_front':
+        for _ in range(2):
+            angle = orientation_hint(result)
+            if not angle:
+                break
+            image = image.rotate(angle, expand=True)
+            result, _ = engine(np.array(ImageOps.invert(image))[:, :, ::-1].copy())
     words = []
     for box, text, confidence in result or []:
         left, top = min(p[0] for p in box), min(p[1] for p in box)

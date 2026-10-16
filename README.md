@@ -238,3 +238,12 @@ not a claim of zero storage. Telegram and authorized operator devices also hold
 application copies. These controls do not guarantee zero OCR errors or prevent
 a compromised host administrator, operator account, or Telegram account from
 accessing documents. Never use OCR as an unreviewed identity verification system.
+
+
+Licence front processing detects sideways text geometry and rotates the image
+in RAM (at most two corrections), including upside-down numbered layouts.
+Field numbers joined to the printed name, such as `1SURNAME` and `2GIVEN`, are
+recognized without treating them as name letters. A missing word boundary
+before a printed administrative suffix is restored; geographic letters are
+never corrected or completed. Rotation work remains inside the same worker
+time budget, so difficult photos can still produce partial results.
