@@ -116,3 +116,15 @@ class FastOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('TELEGRAM_BOT_TOKEN', environment)
         self.assertNotIn('BRAND_SHEETS_SECRET', environment)
         self.assertEqual(environment['OMP_THREAD_LIMIT'], '1')
+
+
+class RotationTimeoutRegression(unittest.IsolatedAsyncioTestCase):
+    async def test_later_timeout_preserves_first_rotation_fields(self):
+        file = N(file_size=10, download_as_bytearray=AsyncMock(return_value=b"image"))
+        bot = N(get_file=AsyncMock(return_value=file))
+        words = sample_words(["4d. 12345678901234"])
+        with patch.object(fast, 'image_view', return_value=(b"png", 1600, 900)), \
+             patch.object(fast, 'recognize', AsyncMock(side_effect=[words, asyncio.TimeoutError(), asyncio.TimeoutError()])):
+            result = await fast.extract_one(bot, "license_front", "file", "tesseract", "eng")
+        self.assertEqual(result["pinfl"], "12345678901234")
+        self.assertIsNone(result["license_number"])

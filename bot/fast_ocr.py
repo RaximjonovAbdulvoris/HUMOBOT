@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+import time
 from weakref import WeakKeyDictionary
 
 from PIL import Image, ImageOps, ImageFilter
@@ -157,23 +158,40 @@ async def extract_one(bot, source, file_id, binary, languages):
     from bot.document_ocr import SOURCES
     gate = _GATES.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(2))
     async with gate:
-        file = await bot.get_file(file_id)
+        started = time.monotonic()
+        stage = "telegram_metadata"
+        try:
+            file = await asyncio.wait_for(bot.get_file(file_id), timeout=10)
+        except Exception as error:
+            logger.warning("Fast OCR stage failed: source=%s stage=%s error=%s", source, stage, type(error).__name__)
+            raise
         if file.file_size and file.file_size > 5_000_000:
             raise ValueError('Image too large')
-        raw = await file.download_as_bytearray()
+        try:
+            raw = await asyncio.wait_for(file.download_as_bytearray(), timeout=10)
+        except Exception as error:
+            logger.warning("Fast OCR stage failed: source=%s stage=telegram_download error=%s", source, type(error).__name__)
+            raise
         if len(raw) > 5_000_000:
             raise ValueError('Image too large')
         candidates = {field: set() for field in SOURCES[source]}
         # Normal and sideways photographs, bounded to avoid minute-long inference.
         for rotation in (0, 90, 270):
             image, width, height = await asyncio.to_thread(image_view, raw, rotation)
-            words = await recognize(binary, languages, image)
+            try:
+                words = await recognize(binary, languages, image)
+            except (asyncio.TimeoutError, RuntimeError) as error:
+                logger.warning("Fast OCR stage failed: source=%s stage=tesseract rotation=%s error=%s",
+                    source, rotation, type(error).__name__)
+                continue
             result = parse_fields(words, source, width, height)
             for field in candidates:
                 if result[field]:
                     candidates[field].add(result[field])
             if all(len(items) == 1 for items in candidates.values()):
                 break
+        logger.info("Fast OCR source finished: source=%s seconds=%.2f fields=%s",
+            source, time.monotonic() - started, sum(len(items) == 1 for items in candidates.values()))
         return {field: next(iter(items)) if len(items) == 1 else None for field, items in candidates.items()}
 
 
