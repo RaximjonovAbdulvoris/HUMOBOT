@@ -9,6 +9,11 @@ from bot import document_ocr as ocr
 
 
 class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        backend = patch.dict(os.environ, {'DOCUMENT_OCR_BACKEND': 'ollama'})
+        backend.start()
+        self.addCleanup(backend.stop)
+
     @staticmethod
     def image_bytes():
         from io import BytesIO

@@ -121,6 +121,13 @@ def enabled():
     return os.environ.get('DOCUMENT_AI_ENABLED', '1') == '1'
 
 
+def ocr_backend():
+    backend = os.environ.get('DOCUMENT_OCR_BACKEND', 'fast').strip()
+    if backend not in ('fast', 'ollama'):
+        raise ValueError('Unknown local OCR backend')
+    return backend
+
+
 def local_model():
     model = os.environ.get('LOCAL_OCR_MODEL', 'qwen2.5vl:3b').strip()
     if model not in LOCAL_MODELS:
@@ -225,6 +232,13 @@ async def extract_documents(bot, data):
     unavailable = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': 'local'}
     if not enabled():
         return unavailable
+    if ocr_backend() == 'fast':
+        from bot.fast_ocr import extract_documents as fast_extract
+        try:
+            return await fast_extract(bot, data)
+        except Exception as error:
+            logger.warning('Fast document OCR unavailable (%s)', type(error).__name__)
+            return dict(unavailable, backend='fast')
     groups = [tuple(source for source in group if data.get(source)) for group in GROUPS]
     groups = [group for group in groups if group]
     if not groups:
@@ -274,20 +288,21 @@ async def extract_documents(bot, data):
 
 async def prepare_document_summary(context):
     data = context.user_data
-    if data.get('_document_ocr', {}).get('backend') != 'local':
+    expected = 'fast' if ocr_backend() == 'fast' else 'local'
+    if data.get('_document_ocr', {}).get('backend') != expected:
         try:
             data['_document_ocr'] = await asyncio.wait_for(
-                extract_documents(context.bot, data), timeout=1155,
+                extract_documents(context.bot, data), timeout=75 if expected == 'fast' else 1155,
             )
         except Exception as error:
             logger.warning('Document extraction unavailable (%s)', type(error).__name__)
-            data['_document_ocr'] = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': 'local'}
+            data['_document_ocr'] = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': expected}
     return format_summary(data['_document_ocr'])
 
 
 def format_summary(result):
     lines = ['📋 <b>Hujjatlardan o‘qilgan ma’lumotlar</b>',
-             'Mahalliy AI natijasi — kiritishdan oldin asl hujjat bilan tekshiring.']
+             'Mahalliy OCR natijasi — kiritishdan oldin asl hujjat bilan tekshiring.']
     if result.get('status') == 'unavailable':
         lines.append('⚠️ Mahalliy AI tekshiruvi mavjud emas. Rasmlardan qo‘lda tekshiring.')
     values = result.get('values', {})

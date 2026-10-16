@@ -170,11 +170,15 @@ journalctl -u humobot-test -n 30 --no-pager
 Set `ARCHIVE_GROUP` before testing Ready. Never run a second polling process
 alongside the systemd service; `--check` only performs read-only checks.
 
-### Local document AI and privacy
+### Local document OCR and privacy
 
-Document inference now uses only `http://127.0.0.1:11434` with Ollama. The CodeCraft API route and cloud fallback have been removed. Even an old CodeCraft key left in the environment is not used. Approved local model tags are `qwen2.5vl:3b` and `qwen2.5vl:7b`; the setup installs 3b. Only passport, driving licence and registration certificate images are processed. Front/back images are read together, nearly white outer margins are trimmed with padding and images are capped at 1280 pixels on the long side to reduce CPU image encoding. Original Telegram photos are untouched. Metadata is stripped in RAM, conflicting readings remain empty, and operators must verify against the originals. Selfies and car photographs are not sent to the AI engine.
+The default backend is now **fast local Tesseract OCR** (`DOCUMENT_OCR_BACKEND=fast`). Install on the test VPS with `bash scripts/setup_fast_ocr.sh`. This installs system language packages, runs a real synthetic recognition check, preserves bot/Sheets settings, stops the Ollama service installed for this test, configures fast mode and restarts only `humobot-test`. No GPU, AI key or external inference is used. Document buffers pass to Tesseract via stdin/stdout in RAM, child processes do not inherit bot credentials, and no raw OCR text is logged. A batch has a 60-second work budget (plus engine preflight and cancellation cleanup); finished fields are kept, unknown/conflicting fields remain for manual review. Two OCR processes with one thread each limit CPU use. Supported rules target licence fields 3/4b/4d/5, complete PINFL tokens, labelled passport dates and upper-right registration serials. This is not a general document-understanding guarantee.
 
-On the existing test server, update code and dependencies, then run:
+Measured in this workspace: a synthetic five-field licence was read correctly in 0.28s; the user's phone-screen licence example took 2.22s for three orientations and yielded PINFL and birth date, while the marked certificate example took 1.84s and its serial was not recovered. No private values/images are committed. These measurements are not VPS speed guarantees and do not establish complete real-document accuracy.
+
+The following is the **optional slow legacy mode** (`DOCUMENT_OCR_BACKEND=ollama`), not the default. Its inference uses only `http://127.0.0.1:11434` with Ollama. The CodeCraft API route and cloud fallback have been removed. Even an old CodeCraft key left in the environment is not used. Approved local model tags are `qwen2.5vl:3b` and `qwen2.5vl:7b`; the setup installs 3b. Only passport, driving licence and registration certificate images are processed. Front/back images are read together, nearly white outer margins are trimmed with padding and images are capped at 1280 pixels on the long side to reduce CPU image encoding. Original Telegram photos are untouched. Metadata is stripped in RAM, conflicting readings remain empty, and operators must verify against the originals. Selfies and car photographs are not sent to the AI engine.
+
+Only if deliberately selecting legacy Ollama mode, update code and dependencies, then run:
 
 ```bash
 bash scripts/setup_local_ocr.sh

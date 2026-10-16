@@ -74,8 +74,8 @@ if not path.exists():
     raise SystemExit('.env.test missing; local engine installed, bot configuration unchanged.')
 lines = [line for line in path.read_text().splitlines()
          if line.split('=', 1)[0].strip() not in
-         {'CODECRAFT_API_KEY', 'CODECRAFT_VISION_MODEL', 'LOCAL_OCR_MODEL', 'DOCUMENT_AI_ENABLED'}]
-lines += ['LOCAL_OCR_MODEL=qwen2.5vl:3b', 'DOCUMENT_AI_ENABLED=1']
+         {'CODECRAFT_API_KEY', 'CODECRAFT_VISION_MODEL', 'LOCAL_OCR_MODEL', 'DOCUMENT_AI_ENABLED', 'DOCUMENT_OCR_BACKEND'}]
+lines += ['LOCAL_OCR_MODEL=qwen2.5vl:3b', 'DOCUMENT_AI_ENABLED=1', 'DOCUMENT_OCR_BACKEND=ollama']
 fd, name = tempfile.mkstemp(prefix='.env-local-', dir='.')
 try:
     with os.fdopen(fd, 'w') as stream:

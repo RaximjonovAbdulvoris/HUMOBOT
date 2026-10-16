@@ -25,6 +25,7 @@ def configure():
     os.environ.update({
         'TELEGRAM_BOT_TOKEN': token,
         'DOCUMENT_AI_ENABLED': values.get('DOCUMENT_AI_ENABLED', '1'),
+        'DOCUMENT_OCR_BACKEND': values.get('DOCUMENT_OCR_BACKEND', 'fast'),
         'LOCAL_OCR_MODEL': values.get('LOCAL_OCR_MODEL', 'qwen2.5vl:3b'),
         'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
         'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
@@ -49,11 +50,16 @@ def configure():
 
 
 async def preflight():
-    from bot.document_ocr import enabled, local_client, local_model, check_local_engine
+    from bot.document_ocr import enabled, local_client, local_model, check_local_engine, ocr_backend
     if enabled():
-        async with local_client() as client:
-            await check_local_engine(client, local_model())
-        print('Local OCR model verified; external AI is disabled.', flush=True)
+        if ocr_backend() == 'fast':
+            from bot.fast_ocr import engine_info
+            await engine_info()
+            print('Fast local OCR verified; no Ollama or external AI needed.', flush=True)
+        else:
+            async with local_client() as client:
+                await check_local_engine(client, local_model())
+            print('Local OCR model verified; external AI is disabled.', flush=True)
     from telegram import Bot
     from telegram.request import HTTPXRequest
     request = HTTPXRequest(connect_timeout=30, read_timeout=30, write_timeout=30, connection_pool_size=8)
