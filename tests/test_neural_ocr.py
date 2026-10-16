@@ -143,3 +143,48 @@ class PlaceFormattingTests(unittest.TestCase):
         self.assertEqual(clean_place('TESTTUMANI'), 'TEST TUMANI')
         self.assertEqual(clean_place('TEST TUMANI'), 'TEST TUMANI')
         self.assertEqual(clean_place('TEST TUMNI'), 'TEST TUMNI')
+
+class NeuralQueueAndFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_queue_does_not_use_two_second_timeout(self):
+        with patch.object(neural, '_worker', AsyncMock(return_value=[])), \
+             patch.object(asyncio, 'wait_for') as timed:
+            await neural.worker([])
+        timed.assert_not_called()
+
+    async def test_front_registration_is_used_when_back_read_is_empty(self):
+        file = N(file_size=4, download_as_bytearray=AsyncMock(return_value=b'data'))
+        bot = N(get_file=AsyncMock(return_value=file))
+        with patch.object(neural, 'worker', AsyncMock(return_value=[
+            {'source': 'tech_back', 'values': {}},
+            {'source': 'tech_front', 'values': {'vehicle_registration': 'ABC1234567'}}])):
+            result = await neural.extract_documents(bot, {'tech_back': 'back', 'tech_front': 'front'})
+        self.assertEqual(result['values']['vehicle_registration'], 'ABC1234567')
+        self.assertFalse(result['retryable'])
+
+    async def test_incremental_result_is_preserved_when_source_never_finishes(self):
+        file = N(file_size=4, download_as_bytearray=AsyncMock(return_value=b'data'))
+        with patch.object(neural, 'worker', AsyncMock(return_value=[{
+            'source': 'license_front', 'values': {'pinfl': '12345678901234'}, 'final': False}])):
+            result = await neural.extract_documents(N(get_file=AsyncMock(return_value=file)), {'license_front': 'one'})
+        self.assertEqual(result['values']['pinfl'], '12345678901234')
+        self.assertTrue(result['retryable'])
+
+    async def test_final_result_can_remove_an_unconfirmed_partial_value(self):
+        file = N(file_size=4, download_as_bytearray=AsyncMock(return_value=b'data'))
+        with patch.object(neural, 'worker', AsyncMock(return_value=[
+            {'source': 'license_front', 'values': {'birth_place': 'TEST CITY'}, 'final': False},
+            {'source': 'license_front', 'values': {'birth_place': None}, 'final': True}])):
+            result = await neural.extract_documents(N(get_file=AsyncMock(return_value=file)), {'license_front': 'one'})
+        self.assertIsNone(result['values']['birth_place'])
+
+    def test_expired_and_future_dates_are_marked_for_review(self):
+        from datetime import date
+        warnings = ocr.review_warnings({'license_expiry': '01.01.2020', 'birth_date': '01.01.2040'}, date(2026, 1, 1))
+        self.assertEqual(len(warnings), 2)
+
+class TechnicalOrientationTests(unittest.TestCase):
+    def test_upside_down_registration_numbered_layout(self):
+        from bot.neural_ocr_worker import orientation_hint
+        rows = [([[100,y],[300,y],[300,y+20],[100,y+20]], text, .99)
+                for text,y in [('9. 2020',300),('10. SEDAN',250),('11. VIN',200)]]
+        self.assertEqual(orientation_hint(rows, technical=True), 180)

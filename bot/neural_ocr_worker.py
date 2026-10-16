@@ -139,7 +139,7 @@ def refine_birth(engine, image, word):
     return result
 
 
-def orientation_hint(result):
+def orientation_hint(result, technical=False):
     """Infer page rotation from detected text geometry, not phone EXIF alone."""
     from statistics import median
     tall = wide = 0
@@ -151,7 +151,7 @@ def orientation_hint(result):
         if len(text) >= 6 and confidence >= .6:
             tall += height > width * 1.5
             wide += width > height * 1.5
-        match = re.match(r'^([1-5])(?:[a-d])?(?:[.)]|\s|(?=[A-Z]))', text, re.I)
+        match = re.match(r'^([0-9]{1,2})[.)]', text) if technical else re.match(r'^([1-5])(?:[a-d])?(?:[.)]|\s|(?=[A-Z]))', text, re.I)
         if match and confidence >= .85:
             ranks.setdefault(int(match[1]), []).append(sum(y) / len(y))
     if tall >= 3 and tall > wide * 1.5:
@@ -163,7 +163,7 @@ def orientation_hint(result):
     return 0
 
 
-def read_document(engine, raw, source):
+def read_document(engine, raw, source, emit=None):
     import numpy as np
     with Image.open(BytesIO(raw)) as opened:
         if opened.width * opened.height > 30_000_000:
@@ -171,9 +171,9 @@ def read_document(engine, raw, source):
         image = ImageOps.exif_transpose(opened).convert('RGB')
     image.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
     result, _ = engine(np.array(ImageOps.invert(image))[:, :, ::-1].copy())
-    if source == 'license_front':
+    if source == 'license_front' or source.startswith('tech_'):
         for _ in range(2):
-            angle = orientation_hint(result)
+            angle = orientation_hint(result, technical=source.startswith('tech_'))
             if not angle:
                 break
             image = image.rotate(angle, expand=True)
@@ -186,6 +186,8 @@ def read_document(engine, raw, source):
     values = fields_from_rows(words, source, image.width, image.height)
     if source == 'license_front':
         values['full_name'] = licence_name(words)
+        if emit:
+            emit(guard_identifiers(values)[0])
         anchors = [w for w in words if w.confidence >= 75 and re.match(r'^3[.)]', w.text)]
         if len(anchors) == 1:
             refined = refine_birth(engine, image, anchors[0])
@@ -204,14 +206,21 @@ def main():
         print(json.dumps({'ready': True}), flush=True)
         return
     payload = json.loads(sys.stdin.buffer.read(45_000_000))
+    registration_found = False
     for item in payload:
         source = item['source']
+        if source == 'tech_front' and registration_found:
+            print(json.dumps({'source': source, 'values': {}, 'skipped': True, 'final': True}), flush=True)
+            continue
         try:
             raw = base64.b64decode(item['image'], validate=True)
             if len(raw) > 5_000_000:
                 raise ValueError('Image too large')
-            values = read_document(engine, raw, source)
-            print(json.dumps({'source': source, 'values': values}), flush=True)
+            values = read_document(engine, raw, source, emit=lambda partial: print(
+                json.dumps({'source': source, 'values': partial, 'final': False}), flush=True))
+            if source == 'tech_back' and values.get('vehicle_registration'):
+                registration_found = True
+            print(json.dumps({'source': source, 'values': values, 'final': True}), flush=True)
         except Exception as error:
             print(json.dumps({'source': source, 'error': type(error).__name__}), flush=True)
 

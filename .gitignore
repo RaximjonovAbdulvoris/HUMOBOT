@@ -71,3 +71,7 @@ visual_templates/
 
 *.key
 .state-*
+
+# Passphrase-encrypted operational backups
+*.enc
+humobot-backups/

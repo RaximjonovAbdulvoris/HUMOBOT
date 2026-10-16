@@ -132,7 +132,8 @@ async def move_to_review(context, key, record, action):
         media_albums=albums, code=code,
     )
     child = operator._record_for_key(context, child_key)
-    for field in ('ocr_status', 'ocr_prefix', 'ocr_suffix', 'ocr_input', 'ocr_result'):
+    for field in ('ocr_status', 'ocr_prefix', 'ocr_suffix', 'ocr_input', 'ocr_result',
+                  'ocr_attempts', 'ocr_retry_at', 'ocr_delivery_pending', 'ocr_delivery_attempts'):
         if field in record:
             child[field] = deepcopy(record[field])
     child['queue_kind'] = action

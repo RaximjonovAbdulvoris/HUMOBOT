@@ -247,3 +247,47 @@ recognized without treating them as name letters. A missing word boundary
 before a printed administrative suffix is restored; geographic letters are
 never corrected or completed. Rotation work remains inside the same worker
 time budget, so difficult photos can still produce partial results.
+
+
+### OCR queue and recovery
+
+Concurrent applications wait in a FIFO background queue before downloading
+images; they are not rejected after two seconds. The initial Telegram
+application remains available to operators while OCR waits. Queue wait and
+Telegram transfers are additional to the 10-second worker budget; there is no
+guarantee of a 10-second end-to-end result under load.
+
+Technical failures retry at most three extraction attempts, with persisted
+attempt counters and retry times. The scheduler checks due jobs every 15
+seconds and resumes them after restart. Missing fields without a technical
+failure are marked for operator review rather than endlessly re-reading the
+same poor image. Earlier useful fields survive transient failures; conflicting
+values remain unknown. Telegram card-edit failures retry the cached result
+without re-running OCR, also at most three delivery failures. Moving an
+application carries this retry state; deleting/archiving it prevents later edits.
+
+The worker emits preliminary licence values before detailed field-3 rereads.
+If its budget expires later, received partial values are preserved and marked
+for retry. Registration reverse is tried first, then front if the serial was
+not read. Licence/registration sideways and upside-down text is reoriented
+within the same worker budget. Expired licence dates and future birth dates
+produce explicit review warnings; OCR never authenticates a document.
+
+### Encrypted recovery backup
+
+Run `venv/bin/python scripts/backup_test_state.py` on the server. Enter and
+confirm a strong unique passphrase of at least 16 characters at the private
+prompt. The script writes a mode-0600 encrypted `.enc` backup under
+`~/humobot-backups/`, covering test configuration, encrypted state and its key,
+routing and a consistent SQLite counter snapshot. It authenticates the
+state/key pair and database without unpickling backup content. It does not
+stop or restore the live bot. Save a copy outside the VPS and keep its
+passphrase separately. No off-server backup is made automatically.
+
+Check a backup with `venv/bin/python scripts/backup_test_state.py --verify PATH`
+and enter its passphrase. To inspect recovery files, add `--restore-to NEW_DIR`;
+the target must not exist, and live files are never overwritten. A backup
+contains credentials and must remain private even though it is encrypted.
+Without the backup passphrase or original state key, encrypted state cannot
+be recovered. Restoring old state/counters requires reconciling newer Telegram
+applications before reuse; do not roll back a live counter blindly.

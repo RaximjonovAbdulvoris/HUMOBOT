@@ -17,7 +17,7 @@ _GATES = WeakKeyDictionary()
 
 async def worker(payload=None):
     gate = _GATES.setdefault(asyncio.get_running_loop(), asyncio.Semaphore(1))
-    await asyncio.wait_for(gate.acquire(), timeout=2)
+    await gate.acquire()
     try:
         return await _worker(payload)
     finally:
@@ -36,7 +36,12 @@ async def _worker(payload=None):
         await process.stdin.drain()
         process.stdin.close()
         while line := await process.stdout.readline():
-            output.append(json.loads(line))
+            try:
+                row = json.loads(line)
+                if isinstance(row, dict):
+                    output.append(row)
+            except (ValueError, TypeError):
+                logger.warning('Local OCR worker emitted invalid protocol line')
         await process.wait()
     timed_out = False
     try:
@@ -47,7 +52,7 @@ async def _worker(payload=None):
         if process.returncode is None:
             process.kill()
             await process.wait()
-    if process.returncode and not timed_out:
+    if process.returncode and not timed_out and not output:
         raise RuntimeError('Local neural OCR worker failed')
     return output
 
@@ -60,7 +65,7 @@ async def engine_info():
 
 async def extract_documents(bot, data):
     start = time.monotonic()
-    order = ('license_front', 'tech_back' if data.get('tech_back') else 'tech_front')
+    order = ('license_front', 'tech_back', 'tech_front')
     selected = [source for source in order if data.get(source)]
     async def download(source):
         file = await bot.get_file(data[source])
@@ -81,11 +86,16 @@ async def extract_documents(bot, data):
     rows = await worker(payload) if payload else []
     candidates = {key: set() for key in (*FIELDS, 'full_name')}
     completed = set()
+    latest = {}
     for row in rows:
+        if row.get('source') in selected and 'error' not in row:
+            latest[row['source']] = row
+    for row in latest.values():
         source = row.get('source')
-        if source not in selected or source in completed or 'error' in row:
+        if source not in selected or 'error' in row:
             continue
-        completed.add(source)
+        if row.get('final', True):
+            completed.add(source)
         values = normalize(row.get('values', {}))
         from bot.neural_ocr_worker import clean_name
         values['full_name'] = clean_name(row.get('values', {}).get('full_name') or '') if source == 'license_front' else None
@@ -95,8 +105,11 @@ async def extract_documents(bot, data):
     failed += [item['source'] for item in payload if item['source'] not in completed]
     values = {key: next(iter(items)) if len(items) == 1 else None for key, items in candidates.items()}
     values, rejected = guard_identifiers(values, data.get('car_plate'))
+    source_errors = list(failed)
+    failed = [source for source in failed if source == 'license_front' or
+              (source.startswith('tech_') and not values.get('vehicle_registration'))]
     logger.info('Neural OCR finished: seconds=%.2f fields=%s failed_sources=%s',
         time.monotonic() - start, sum(bool(v) for v in values.values()), len(failed))
-    return {'backend': 'rapid', 'status': 'complete' if all(values.values()) and not failed else 'partial',
-        'values': values, 'failed_sources': failed, 'rejected_fields': rejected,
+    return {'retryable': bool(failed), 'backend': 'rapid', 'status': 'complete' if all(values.values()) and not failed else 'partial',
+        'values': values, 'failed_sources': failed, 'source_errors': source_errors, 'rejected_fields': rejected,
         'conflicting_fields': [key for key, items in candidates.items() if len(items) > 1]}

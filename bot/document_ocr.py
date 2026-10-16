@@ -307,12 +307,36 @@ async def prepare_document_summary(context):
     return format_summary(data['_document_ocr'])
 
 
+def review_warnings(values, today=None):
+    """Plausibility notices only, never a claim of authentic document verification."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today = today or datetime.now(ZoneInfo('Asia/Tashkent')).date()
+    warnings = []
+    for key, message in (
+        ('license_expiry', 'Pravaning ko‘rsatilgan amal qilish muddati tugagan — operator tekshirsin.'),
+        ('birth_date', 'Tug‘ilgan sana kelajakda ko‘rsatilgan — operator tekshirsin.'),
+    ):
+        try:
+            parsed = datetime.strptime(values.get(key) or '', '%d.%m.%Y').date()
+        except ValueError:
+            continue
+        if (key == 'license_expiry' and parsed < today) or (key == 'birth_date' and parsed > today):
+            warnings.append(message)
+    return warnings
+
+
 def format_summary(result):
     lines = ['📋 <b>Hujjatlardan o‘qilgan ma’lumotlar</b>',
              'Mahalliy OCR natijasi — kiritishdan oldin asl hujjat bilan tekshiring.']
     if result.get('status') == 'unavailable':
         lines.append('⚠️ Mahalliy AI tekshiruvi mavjud emas. Rasmlardan qo‘lda tekshiring.')
     values = result.get('values', {})
+    if result.get('retry_scheduled'):
+        lines.append('⏳ Texnik uzilish: topilgan ma’lumotlar saqlandi, qayta tekshirish navbatda.')
+    for warning in review_warnings(values):
+        lines.append('⚠️ ' + warning)
+    lines.append('OCR hujjatning haqiqiyligini tasdiqlamaydi.')
     display = dict(FIELDS)
     if result.get('backend') == 'rapid' or values.get('full_name'):
         display = {'full_name': 'Pravadagi ism-familiya', **display}
