@@ -138,6 +138,8 @@ async def post_init(application) -> None:
     await warmup_templates(application)
     from bot.background_ocr import resume_pending
     application.job_queue.run_once(resume_pending, when=0)
+    from bot.brand_sheets import flush as flush_brand_sheets
+    application.job_queue.run_repeating(flush_brand_sheets, interval=30, first=5)
 
 
 def main() -> None:

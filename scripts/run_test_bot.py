@@ -35,6 +35,8 @@ def configure():
     })
     for key in ("INCOMPLETE_GROUP", "OTHER_PARK_GROUP", "WELCOME_STICKER_ID", "SUCCESS_STICKER_ID"):
         os.environ[key] = values.get(key, "")
+    for key in ("BRAND_SHEETS_WEBHOOK_URL", "BRAND_SHEETS_SECRET"):
+        os.environ[key] = values.get(key, "")
     for action in ("READY", "PROGRESS", "INCOMPLETE", "OTHERPARK", "DELETE"):
         key = f"PREMIUM_ICON_{action}"
         os.environ[key] = values.get(key, "")

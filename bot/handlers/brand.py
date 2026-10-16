@@ -297,15 +297,18 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"🔢 Davlat raqami: {h(data['b_plate'])}"
     )
     try:
-        await context.bot.send_message(
-            chat_id=group_id,
-            text=text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=None,
-        )
-        # Brand and Spectre stay in their destination groups as plain messages.
+        if not data.get('_brand_group_message'):
+            message = await context.bot.send_message(
+                chat_id=group_id, text=text, parse_mode=ParseMode.HTML, reply_markup=None)
+            data['_brand_group_message'] = message.message_id
+        if kind == 'brand':
+            from bot.brand_sheets import enqueue
+            enqueue(context, data, user, code, region_name(region))
+            from bot.queue_moves import checkpoint
+            await checkpoint(context)
+        # The periodic exporter retries independently of Telegram delivery.
     except Exception as error:
-        logger.exception("brand: arizani guruhga yuborib bo‘lmadi: %s", error)
+        logger.warning("Brand submission failed (%s)", type(error).__name__)
         if isinstance(error, NetworkError) and not isinstance(error, BadRequest):
             context.user_data["_delivery_uncertain"] = True
             await update.message.reply_text(

@@ -258,3 +258,20 @@ class DocumentOCRTests(unittest.IsolatedAsyncioTestCase):
         for field in ('vehicle_registration', 'license_number'):
             values, _ = ocr.guard_identifiers({field: '01A123BC'})
             self.assertIsNone(values[field])
+
+    def test_document_field_locations_are_explicit(self):
+        self.assertIn('4d', ocr.field_prompt(('pinfl',)))
+        self.assertIn('field 3', ocr.field_prompt(('birth_place', 'birth_date')))
+        self.assertIn('NEVER field 8', ocr.field_prompt(('birth_place',)))
+        self.assertIn('field 5', ocr.field_prompt(('license_number',)))
+        self.assertIn('UPPER RIGHT near hologram', ocr.field_prompt(('vehicle_registration',)))
+        self.assertIn('pinfl', ocr.SOURCES['license_front'])
+
+    async def test_pinfl_can_come_from_licence_when_passport_is_empty(self):
+        with patch.object(ocr, 'local_client', return_value=self.client(
+                lambda request: httpx.Response(200, json={'capabilities': ['vision']}))), \
+             patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1'}), \
+             patch.object(ocr, 'extract_group', AsyncMock(side_effect=[
+                {'pinfl': None}, {'pinfl': '12345678901234'}])):
+            result = await ocr.extract_documents(N(), {'passport_front': 'a', 'license_front': 'b'})
+        self.assertEqual(result['values']['pinfl'], '12345678901234')
