@@ -19,7 +19,7 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
     def enqueue(self, ctx):
         sheets.enqueue(ctx, {'b_name': '=1+1', 'b_phone': '+998000000000',
             'b_model': 'TEST', 'b_year': '2020', 'b_color': 'Oq', 'b_plate': '01A123BC'},
-            N(username='test', id=123), 'HM-000001', 'Toshkent')
+            N(username='test', id=123), 'HM-000001', 'tashkent')
 
     def test_signature_covers_timestamp_and_payload(self):
         body = sheets.signed({'code': 'HM-000001', 'row': ['example']}, SECRET, 1700000000)
@@ -34,7 +34,7 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
         self.enqueue(ctx)
         self.assertEqual(len(ctx.bot_data['brand_sheets_outbox']), 1)
         item = ctx.bot_data['brand_sheets_outbox']['HM-000001']
-        self.assertEqual(len(item['payload']['row']), len(sheets.HEADERS))
+        self.assertEqual(set(item['payload']['fields']), {'name', 'phone', 'model', 'year', 'color', 'plate'})
         self.assertNotIn('passport', json.dumps(item))
 
     def test_endpoint_must_be_google_apps_script(self):
@@ -85,6 +85,25 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
             await sheets.flush(ctx)
         self.assertEqual(item, {'status': 'sent'})
 
+    def test_all_regions_and_application_types_have_explicit_routes(self):
+        for region in ('tashkent', 'namangan'):
+            for kind in ('brand', 'spectre'):
+                ctx = self.context()
+                sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000001', region, kind=kind)
+                payload = ctx.bot_data['brand_sheets_outbox']['HM-000001']['payload']
+                self.assertEqual((payload['region'], payload['kind']), (region, kind))
+        with self.assertRaises(ValueError):
+            sheets.enqueue(self.context(), {}, N(username=None, id=1), 'HM-000001', 'unknown')
+
+    def test_queued_v1_brand_payload_migrates_without_losing_route(self):
+        old = {'code': 'HM-000001', 'row': ['HM-000001', '2026-01-01', 'Namangan shahri',
+            'Test', '+998000000000', 'Model', '2020', 'Oq', '01A123BC', 'test', '123']}
+        result = sheets.normalize_payload(old)
+        self.assertEqual(result['region'], 'namangan')
+        self.assertEqual(result['kind'], 'brand')
+        self.assertEqual(result['fields']['plate'], '01A123BC')
+        self.assertNotIn('row', result)
+
     async def test_unconfigured_export_does_not_send(self):
         ctx = self.context()
         self.enqueue(ctx)
@@ -92,3 +111,13 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
              patch.object(sheets, 'post_export', AsyncMock()) as send:
             await sheets.flush(ctx)
         send.assert_not_awaited()
+
+    async def test_failed_region_does_not_block_spectre_export(self):
+        ctx = self.context()
+        self.enqueue(ctx)
+        sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000002', 'namangan', kind='spectre')
+        with patch.object(sheets, 'configuration', return_value=(URL, SECRET)), \
+             patch.object(sheets, 'post_export', AsyncMock(side_effect=[RuntimeError(), None])):
+            await sheets.flush(ctx)
+        self.assertEqual(ctx.bot_data['brand_sheets_outbox']['HM-000001']['status'], 'pending')
+        self.assertEqual(ctx.bot_data['brand_sheets_outbox']['HM-000002']['status'], 'sent')

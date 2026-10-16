@@ -16,8 +16,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 _LOCKS = WeakKeyDictionary()
-HEADERS = ('Ariza kodi', 'Sana', 'Hudud', 'F.I.Sh.', 'Telefon', 'Model', 'Yili',
-           'Rangi', 'Davlat raqami', 'Telegram username', 'Telegram ID')
+
 
 
 def configuration():
@@ -25,20 +24,38 @@ def configuration():
     secret = os.environ.get('BRAND_SHEETS_SECRET', '').strip()
     if not url and not secret:
         return None
-    if not re.fullmatch(r'https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec', url) or len(secret) < 32:
+    if not re.fullmatch(r'https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec', url) or not re.fullmatch(r'[A-Za-z0-9_-]{32,256}', secret):
         raise ValueError('Invalid Google Sheets export configuration')
     return url, secret
 
 
-def enqueue(context, data, user, code, region):
+def region_key(region):
+    aliases = {'tashkent': 'tashkent', 'namangan': 'namangan',
+               'Toshkent shahri': 'tashkent', 'Namangan shahri': 'namangan'}
+    if region not in aliases:
+        raise ValueError('Unknown export region; no fallback destination')
+    return aliases[region]
+
+
+def normalize_payload(payload):
+    if 'row' not in payload:
+        return payload
+    row = payload['row']
+    return {'code': payload['code'], 'kind': 'brand', 'region': region_key(row[2]),
+            'created_at': row[1], 'fields': dict(zip(
+                ('name', 'phone', 'model', 'year', 'color', 'plate'), row[3:9]))}
+
+
+def enqueue(context, data, user, code, region, kind='brand'):
+    if kind not in ('brand', 'spectre'):
+        raise ValueError('Unknown export kind')
     outbox = context.bot_data.setdefault('brand_sheets_outbox', {})
     outbox.setdefault(code, {'status': 'pending', 'payload': {
-        'code': code,
-        'row': [code, datetime.now(ZoneInfo('Asia/Tashkent')).isoformat(timespec='seconds'),
-                region, str(data.get('b_name', '')), str(data.get('b_phone', '')),
-                str(data.get('b_model', '')), str(data.get('b_year', '')),
-                str(data.get('b_color', '')), str(data.get('b_plate', '')),
-                str(user.username or ''), str(user.id)],
+        'code': code, 'kind': kind, 'region': region_key(region),
+        'created_at': datetime.now(ZoneInfo('Asia/Tashkent')).isoformat(timespec='seconds'),
+        'fields': {target: str(data.get(source, '')) for target, source in (
+            ('name', 'b_name'), ('phone', 'b_phone'), ('model', 'b_model'),
+            ('year', 'b_year'), ('color', 'b_color'), ('plate', 'b_plate'))},
     }})
 
 
@@ -82,7 +99,8 @@ async def flush(context):
                 if item.get('status') != 'pending':
                     continue
                 try:
-                    await post_export(client, *config, item['payload'])
+                    payload = normalize_payload(item['payload'])
+                    await post_export(client, *config, payload)
                     item['status'] = 'sent'
                     item.pop('payload', None)
                     application = getattr(context, 'application', None)
@@ -93,4 +111,4 @@ async def flush(context):
                     # The durable item remains pending; retrying the same code
                     # cannot duplicate a row when using the supplied receiver.
                     logger.warning('Brand Sheets export pending (%s)', type(error).__name__)
-                    break
+                    continue

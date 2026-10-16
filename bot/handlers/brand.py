@@ -301,9 +301,9 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             message = await context.bot.send_message(
                 chat_id=group_id, text=text, parse_mode=ParseMode.HTML, reply_markup=None)
             data['_brand_group_message'] = message.message_id
-        if kind == 'brand':
+        if kind in ('brand', 'spectre'):
             from bot.brand_sheets import enqueue
-            enqueue(context, data, user, code, region_name(region))
+            enqueue(context, data, user, code, region, kind=kind)
             from bot.queue_moves import checkpoint
             await checkpoint(context)
         # The periodic exporter retries independently of Telegram delivery.

@@ -192,4 +192,4 @@ CPU tuning: JSON schema constrains the output to requested fields, output budget
 
 ### Brand spreadsheet export
 
-Optional signed Apps Script receiver and encrypted pending outbox are included. Setup and privacy details: [BRAND_SHEETS_SETUP.md](BRAND_SHEETS_SETUP.md). Supply and verify the actual spreadsheet/tab before enabling; this feature has not yet been connected to a live user spreadsheet.
+Optional signed Apps Script receiver and encrypted pending outbox are included for Brend and Spectre. Toshkent/Namangan Brend map to their existing city tabs; both Spectre flows map to the separate workbook’s existing `Лист1` tab. Setup and privacy details: [BRAND_SHEETS_SETUP.md](BRAND_SHEETS_SETUP.md). Supply and verify the actual spreadsheet/tab before enabling; this feature has not yet been connected to a live user spreadsheet.
