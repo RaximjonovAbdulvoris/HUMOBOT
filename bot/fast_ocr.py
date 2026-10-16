@@ -69,9 +69,9 @@ def image_view(raw, rotation=0):
     return stream.getvalue(), image.width, image.height
 
 
-async def recognize(binary, languages, raw):
+async def recognize(binary, languages, raw, psm=11):
     process = await asyncio.create_subprocess_exec(binary, 'stdin', 'stdout',
-        '-l', languages, '--oem', '1', '--psm', '11', 'tsv',
+        '-l', languages, '--oem', '1', '--psm', str(psm), 'tsv',
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE, env=environment())
     try:

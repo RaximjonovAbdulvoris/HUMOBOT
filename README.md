@@ -197,3 +197,24 @@ CPU tuning: JSON schema constrains the output to requested fields, output budget
 ### Brand spreadsheet export
 
 Optional signed Apps Script receiver and encrypted pending outbox are included for Brend and Spectre. Toshkent/Namangan Brend map to their existing city tabs; both Spectre flows map to the separate workbook’s existing `Лист1` tab. Setup and privacy details: [BRAND_SHEETS_SETUP.md](BRAND_SHEETS_SETUP.md). Supply and verify the actual spreadsheet/tab before enabling; this feature has not yet been connected to a live user spreadsheet.
+
+
+### Optional local neural OCR
+
+The Tesseract-only path can time out on textured document photos. On the test
+server run `bash scripts/setup_neural_ocr.sh` to install the optional bundled
+RapidOCR ONNX models and select `DOCUMENT_OCR_BACKEND=rapid`. The script smoke
+tests generated text before changing configuration and preserves existing
+Telegram/Sheets settings. Models run in a separate process with no inherited
+bot credentials; document bytes use pipes, with no document files or raw-text logs.
+
+The worker prioritizes licence front and registration reverse, uses two CPU
+threads, and stops after 10 seconds, preserving complete per-image results
+already emitted. Telegram downloads have a separate six-second timeout; the
+entire Telegram-to-card operation is **not guaranteed to take 10 seconds**.
+No external AI fallback is enabled. On two private example photos, this build
+recovered PINFL, licence number, expiry and registration serial in approximately
+three seconds including worker startup. Birth date/place remained unread; two
+photos are not a representative accuracy benchmark. Operators must verify values.
+The alternate model is focused on Latin/digits; Cyrillic birthplace support is
+limited. Original fast/ollama modes remain explicitly selectable.

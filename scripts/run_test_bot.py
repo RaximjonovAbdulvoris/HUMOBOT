@@ -52,7 +52,11 @@ def configure():
 async def preflight():
     from bot.document_ocr import enabled, local_client, local_model, check_local_engine, ocr_backend
     if enabled():
-        if ocr_backend() == 'fast':
+        if ocr_backend() == 'rapid':
+            from bot.neural_ocr import engine_info
+            await engine_info()
+            print('Local neural OCR verified; external AI is disabled.', flush=True)
+        elif ocr_backend() == 'fast':
             from bot.fast_ocr import engine_info
             await engine_info()
             print('Fast local OCR verified; no Ollama or external AI needed.', flush=True)

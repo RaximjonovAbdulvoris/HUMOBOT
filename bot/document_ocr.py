@@ -123,7 +123,7 @@ def enabled():
 
 def ocr_backend():
     backend = os.environ.get('DOCUMENT_OCR_BACKEND', 'fast').strip()
-    if backend not in ('fast', 'ollama'):
+    if backend not in ('fast', 'rapid', 'ollama'):
         raise ValueError('Unknown local OCR backend')
     return backend
 
@@ -232,6 +232,13 @@ async def extract_documents(bot, data):
     unavailable = {'status': 'unavailable', 'values': {}, 'failed_sources': [], 'backend': 'local'}
     if not enabled():
         return unavailable
+    if ocr_backend() == 'rapid':
+        from bot.neural_ocr import extract_documents as neural_extract
+        try:
+            return await neural_extract(bot, data)
+        except Exception as error:
+            logger.warning('Neural document OCR unavailable (%s)', type(error).__name__)
+            return dict(unavailable, backend='rapid')
     if ocr_backend() == 'fast':
         from bot.fast_ocr import extract_documents as fast_extract
         try:
@@ -288,11 +295,11 @@ async def extract_documents(bot, data):
 
 async def prepare_document_summary(context):
     data = context.user_data
-    expected = 'fast' if ocr_backend() == 'fast' else 'local'
+    expected = ocr_backend() if ocr_backend() in ('fast', 'rapid') else 'local'
     if data.get('_document_ocr', {}).get('backend') != expected:
         try:
             data['_document_ocr'] = await asyncio.wait_for(
-                extract_documents(context.bot, data), timeout=75 if expected == 'fast' else 1155,
+                extract_documents(context.bot, data), timeout=20 if expected == 'rapid' else (75 if expected == 'fast' else 1155),
             )
         except Exception as error:
             logger.warning('Document extraction unavailable (%s)', type(error).__name__)
