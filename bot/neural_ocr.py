@@ -60,7 +60,7 @@ async def engine_info():
 
 async def extract_documents(bot, data):
     start = time.monotonic()
-    order = ('license_front', 'tech_back', 'passport_front', 'license_back', 'tech_front', 'passport_back')
+    order = ('license_front', 'tech_back' if data.get('tech_back') else 'tech_front')
     selected = [source for source in order if data.get(source)]
     async def download(source):
         file = await bot.get_file(data[source])
@@ -79,7 +79,7 @@ async def extract_documents(bot, data):
         else:
             payload.append(item)
     rows = await worker(payload) if payload else []
-    candidates = {key: set() for key in FIELDS}
+    candidates = {key: set() for key in (*FIELDS, 'full_name')}
     completed = set()
     for row in rows:
         source = row.get('source')
@@ -87,7 +87,9 @@ async def extract_documents(bot, data):
             continue
         completed.add(source)
         values = normalize(row.get('values', {}))
-        for key in SOURCES[source]:
+        from bot.neural_ocr_worker import clean_name
+        values['full_name'] = clean_name(row.get('values', {}).get('full_name') or '') if source == 'license_front' else None
+        for key in (*SOURCES[source], 'full_name'):
             if values[key]:
                 candidates[key].add(values[key])
     failed += [item['source'] for item in payload if item['source'] not in completed]

@@ -74,3 +74,44 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(process.returncode, -9)
         self.assertNotIn('TELEGRAM_BOT_TOKEN', spawn.call_args.kwargs['env'])
+
+class LicenceIdentityTests(unittest.TestCase):
+    def test_name_requires_field_two_and_aligned_surname(self):
+        from bot.neural_ocr_worker import licence_name
+        words = [row('EXAMPLE', x=320, y=100, height=28),
+                 row('2', x=290, y=130, width=20, height=28),
+                 row('PERSON', x=320, y=130, height=28),
+                 row('OTHER REGION', x=780, y=100)]
+        self.assertEqual(licence_name(words), 'EXAMPLE PERSON')
+        self.assertIsNone(licence_name([w for w in words if w.text != '2']))
+        self.assertIsNone(licence_name(words + [row('CONFLICT', x=322, y=101, height=28)]))
+
+    def test_repeated_ocr_disagreement_stays_unknown(self):
+        from bot.neural_ocr_worker import unanimous
+        self.assertEqual(unanimous(['TEST CITY'] * 3), 'TEST CITY')
+        self.assertIsNone(unanimous(['TEST CITY', 'TEST C1TY', 'TEST CITY']))
+        self.assertIsNone(unanimous(['TEST CITY', None, 'TEST CITY']))
+
+    def test_names_are_escaped_and_do_not_replace_applicant_name(self):
+        from bot.document_ocr import format_summary
+        text = format_summary({'backend': 'rapid', 'values': {'full_name': 'EXAMPLE PERSON'}})
+        self.assertIn('Pravadagi ism-familiya', text)
+        self.assertIn('<code>EXAMPLE PERSON</code>', text)
+        from bot.neural_ocr_worker import clean_name
+        self.assertIsNone(clean_name('<script>'))
+        self.assertIsNone(clean_name('PERSON123'))
+
+@unittest.skipUnless(__import__('importlib.util', fromlist=['find_spec']).find_spec('numpy'), 'Optional neural dependencies required')
+class LicenceBirthRefinementTests(unittest.TestCase):
+    def test_three_reads_required_and_ambiguous_characters_not_repaired(self):
+        from bot.neural_ocr_worker import refine_birth
+        from PIL import Image
+        from unittest.mock import Mock
+        image = Image.new('RGB', (960, 1280), 'white')
+        field = row('3.TEST CITY 01.02.1990', x=280, y=640, width=360, height=36)
+        good = Mock(side_effect=[([('TEST CITY', .96)], None)] * 3 + [([('01021990', .96)], None)] * 3)
+        result = refine_birth(good, image, field)
+        self.assertEqual(result['birth_place'], 'TEST CITY')
+        self.assertEqual(result['birth_date'], '01.02.1990')
+        uncertain = Mock(side_effect=[([('TEST CITY', .96)], None)] * 3 + [([('O1021990', .96)], None)] * 3)
+        self.assertIsNone(refine_birth(uncertain, image, field)['birth_date'])

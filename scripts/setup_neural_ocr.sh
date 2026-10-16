@@ -5,7 +5,7 @@ TASK_ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$TASK_ROOT"
 apt-get update
 apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus tesseract-ocr-uzb
-apt-get install -y libgl1 libglib2.0-0 fonts-dejavu-core
+apt-get install -y libgl1 libglib2.0-0 fonts-dejavu-core libseccomp2
 venv/bin/python -m pip install -r requirements-ocr.txt
 venv/bin/python scripts/check_neural_ocr.py
 # This installation created Ollama for this test bot. Release old inference and RAM.

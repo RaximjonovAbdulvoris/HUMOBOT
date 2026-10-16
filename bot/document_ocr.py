@@ -313,7 +313,10 @@ def format_summary(result):
     if result.get('status') == 'unavailable':
         lines.append('⚠️ Mahalliy AI tekshiruvi mavjud emas. Rasmlardan qo‘lda tekshiring.')
     values = result.get('values', {})
-    for field, label in FIELDS.items():
+    display = dict(FIELDS)
+    if result.get('backend') == 'rapid' or values.get('full_name'):
+        display = {'full_name': 'Pravadagi ism-familiya', **display}
+    for field, label in display.items():
         value = values.get(field)
         if value:
             text = f'<code>{escape(value)}</code>'

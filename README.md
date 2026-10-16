@@ -208,13 +208,33 @@ tests generated text before changing configuration and preserves existing
 Telegram/Sheets settings. Models run in a separate process with no inherited
 bot credentials; document bytes use pipes, with no document files or raw-text logs.
 
-The worker prioritizes licence front and registration reverse, uses two CPU
-threads, and stops after 10 seconds, preserving complete per-image results
+The worker reads licence front and registration reverse (front only when reverse
+is absent), uses two CPU threads, and stops after 10 seconds, preserving complete per-image results
 already emitted. Telegram downloads have a separate six-second timeout; the
 entire Telegram-to-card operation is **not guaranteed to take 10 seconds**.
 No external AI fallback is enabled. On two private example photos, this build
-recovered PINFL, licence number, expiry and registration serial in approximately
-three seconds including worker startup. Birth date/place remained unread; two
-photos are not a representative accuracy benchmark. Operators must verify values.
+recovered licence surname/given name, PINFL, birth date/place, licence number,
+expiry and registration serial. These are limited example checks, not a
+representative accuracy benchmark. JPEG compression and smaller photos can
+leave fields unknown even when the original is readable. Operators must verify values.
 The alternate model is focused on Latin/digits; Cyrillic birthplace support is
 limited. Original fast/ollama modes remain explicitly selectable.
+
+
+The licence identity is displayed separately as **Pravadagi ism-familiya**; it
+does not overwrite the applicant-entered name or Google Sheets rows. Numbered
+licence fields 1/2/3/4a/4b/4d/5 and detected text baselines guide extraction.
+Field 3 gets small grayscale rereads at three scales; disagreeing readings stay
+unknown. Birth dates are read from printed characters, never inferred from PINFL.
+The home address (field 8) is not used as birthplace.
+
+On Linux, the neural worker now fails closed unless a libseccomp filter blocks
+network socket creation/connect/send syscalls before model import and before
+reading document bytes. Worker core dumps and debug attachment are disabled;
+child environment excludes bot/Sheets credentials. Installing the updated mode
+requires `libseccomp2`, included by `setup_neural_ocr.sh`. Existing encrypted bot
+state still contains necessary application metadata and OCR results; this is
+not a claim of zero storage. Telegram and authorized operator devices also hold
+application copies. These controls do not guarantee zero OCR errors or prevent
+a compromised host administrator, operator account, or Telegram account from
+accessing documents. Never use OCR as an unreviewed identity verification system.
