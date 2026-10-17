@@ -86,8 +86,9 @@ CONTACT_EMOJI_ID = '5319164022245832659'  # Owner-selected phone artwork.
 
 
 def contact_emoji_id():
-    configured = os.environ.get('PREMIUM_ICON_CONTACT', '').strip()
-    return configured if re.fullmatch(r'[0-9]+', configured) else CONTACT_EMOJI_ID
+    # Ignore stale deployments' CONTACT overrides, which previously rendered
+    # unrelated artwork in the user's contact menu.
+    return CONTACT_EMOJI_ID
 
 
 def premium_id(emoji):
