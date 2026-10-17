@@ -19,10 +19,13 @@ takrorlamasin. Ikkala haydovchi guruhi ham har hududda majburiy.
 | `NAMANGAN_OTHER_PARK_GROUP` | `TASHKENT_OTHER_PARK_GROUP` |
 | `ARCHIVE_GROUP` | `TASHKENT_ARCHIVE_GROUP` |
 
-IDlar tayyor bo‘lgach `.env.test`ga `SEPARATE_REGION_GROUPS=1` qo‘shing.
-`venv/bin/python scripts/run_test_bot.py --check` Telegram huquqlarini
-tekshiradi. Tekshiruv o‘tmasa xizmatni restart qilmang. O‘tsa
-`systemctl restart humobot-test` bilan yangi yo‘nalishlar ishga tushadi.
+IDlar tayyor bo‘lgach, 14 ta IDni JSON ko‘rinishida
+`venv/bin/python scripts/activate_region_groups.py` ga stdin orqali bering.
+U IDlarning takrorlanmasligini va botning barcha guruhlarda administrator
+huquqlarini xizmatni to‘xtatishdan oldin tekshiradi. Keyin test botni
+to‘xtatib, `.env.test` hamda `bot_routes.json` ni yangilaydi, preflightdan
+o‘tkazadi va xizmatni qayta ishga tushiradi. Xatoda ikkala faylni tiklab,
+oldingi test botni qayta ishga tushirishga urinadi.
 
 Asosiy bot uchun alohida token, saqlash papkasi, muhit sozlamalari va
 systemd servisi kerak. `scripts/check_release_routes.py`ni asosiy botning
