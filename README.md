@@ -164,8 +164,10 @@ These links identify custom emoji sets, not standalone sticker packs.
 
 Outgoing text, photo captions and keyboard labels use matching Premium emoji
 from these sets. Existing Markdown/HTML emphasis and button actions are kept.
-If a symbol has no match in the selected sets, it is shown as plain text
-without a stock emoji; on Telegram clients without custom emoji support or
+If a symbol has no exact match in the selected sets, a related custom emoji
+from the selected sets is used. If those sets are unavailable, the original
+symbol remains so the message does not lose its meaning. On clients without
+custom emoji support or
 when Telegram rejects an icon, the original message is retried. The bot owner
 must have an active Telegram Premium subscription (or qualifying extra bot
 usernames) for Telegram to accept custom emoji in bot messages. Old menu

@@ -71,11 +71,32 @@ async def with_keyboard_fallback(call, **kwargs):
 PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji')
 _PACK_ICONS = {}
 _PACK_EMOJIS = {}
+_ICON_FALLBACKS = {
+    'DRIVER': '📝📄🪪📋📎📜',
+    'INCOMPLETE': '📷📸🤳✏',
+    'OTHERPARK': '🚖🚕🚗🚘',
+    'BRAND': '🎨',
+    'LOCATION': '📍🏢🗺',
+    'CONTACT': '📞☎✉💬📩✈📢',
+    'SPECTRE': '⚡🔋',
+    'READY': '✅☑✔',
+    'PROGRESS': '⏳🔄🕒🟡',
+    'DELETE': '⚠❗❌🔴🗑',
+}
 
 
 def premium_id(emoji):
-    """Return a real custom emoji ID from the owner's selected packs, if present."""
-    return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
+    """Prefer the matching glyph, then a semantically related Premium glyph."""
+    normalized = emoji.replace('\ufe0f', '')
+    exact = _PACK_EMOJIS.get(normalized)
+    if exact:
+        return exact
+    for action, symbols in _ICON_FALLBACKS.items():
+        if normalized in symbols:
+            return _PACK_ICONS.get(action)
+    # Communications and uncommon symbols use the application pack's visual
+    # style. The visible source text stays in place if the packs are unavailable.
+    return _PACK_ICONS.get('INCOMPLETE')
 
 
 async def load_emoji_packs(application):
@@ -101,6 +122,9 @@ async def load_emoji_packs(application):
         'READY': ('✅', '☑', '✔'), 'PROGRESS': ('⏳', '🔄', '🕒'),
         'INCOMPLETE': ('📄', '📷', '⚠'), 'OTHERPARK': ('🚕', '🚗', '🔁'),
         'DELETE': ('🗑', '❌', '✖'),
+        'DRIVER': ('📝', '📄', '🪪'), 'BRAND': ('🎨', '🚗'),
+        'CONTACT': ('📞', '☎', '💬'), 'LOCATION': ('📍', '🗺', '🏢'),
+        'SPECTRE': ('⚡', '🔋'),
     }
     all_stickers = [s for name in PACK_NAMES for s in packs.get(name, [])]
     for sticker in all_stickers:
@@ -113,7 +137,9 @@ async def load_emoji_packs(application):
         if selected is None and all_stickers:
             fallback_pack = {'READY': 'ApplicationEmoji', 'PROGRESS': 'TONEmoji',
                              'INCOMPLETE': 'NewsEmoji', 'OTHERPARK': 'FinanceEmoji',
-                             'DELETE': 'ApplicationEmoji'}[action]
+                             'DELETE': 'ApplicationEmoji', 'DRIVER': 'ApplicationEmoji',
+                             'BRAND': 'FinanceEmoji', 'CONTACT': 'NewsEmoji',
+                             'LOCATION': 'NewsEmoji', 'SPECTRE': 'TONEmoji'}[action]
             candidates = packs.get(fallback_pack) or all_stickers
             selected = candidates[0]
         if selected:

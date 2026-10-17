@@ -19,6 +19,8 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         presentation._PACK_EMOJIS.clear()
         presentation._PACK_EMOJIS.update({'✅': '12345', '📄': '23456'})
         self.addCleanup(presentation._PACK_EMOJIS.clear)
+        presentation._PACK_ICONS.clear()
+        self.addCleanup(presentation._PACK_ICONS.clear)
 
     def bot(self):
         with patch.dict(os.environ, {'ALL_PROXY': '', 'HTTPS_PROXY': '',
@@ -31,11 +33,20 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('<b>Tayyor</b>', result)
         self.assertIn('<code>📄</code>', result)
 
-    def test_markdown_keeps_bold_and_removes_stock_emoji(self):
+    def test_markdown_keeps_bold_and_unmapped_emoji_if_sets_fail(self):
         result = premium_html('✅ *Tayyor* 📝', 'Markdown')
         self.assertIn('<b>Tayyor</b>', result)
-        self.assertNotIn('📝', result)
+        self.assertIn('📝', result)
         self.assertIn('emoji-id="12345"', result)
+
+    def test_related_premium_symbol_keeps_menu_buttons_visible(self):
+        presentation._PACK_ICONS.update({'DRIVER': '34567', 'CONTACT': '45678'})
+        self.assertIn('emoji-id="34567"', premium_html('📝 Ulanish', 'HTML'))
+        self.assertEqual(premium_html('1️⃣ Old • 2️⃣ Orqa'), '1. Old • 2. Orqa')
+        from bot.handlers.start import MENU_DRIVER, main_keyboard
+        keyboard = main_keyboard('tashkent')
+        self.assertEqual(keyboard.keyboard[0][0].text, MENU_DRIVER)
+        self.assertEqual(keyboard.keyboard[0][0].api_kwargs['icon_custom_emoji_id'], '34567')
 
     def test_button_click_data_survives_premium_render(self):
         markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])

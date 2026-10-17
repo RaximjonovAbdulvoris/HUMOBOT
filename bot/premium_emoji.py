@@ -96,12 +96,15 @@ def premium_html(text, parse_mode=None):
                 output.append(part)
                 continue
             changed = True
+            if '\u20e3' in part:
+                output.append(part[0] + '.')
+                continue
             found = premium_id(part)
             if found and found.isdecimal():
                 output.append(f'<tg-emoji emoji-id="{found}">{part}</tg-emoji>')
-            elif '\u20e3' in part:
-                output.append(part[0] + '.')
-            # No unrelated stock emoji or misleading premium icon as a fallback.
+            else:
+                output.append(part)
+            # Keep the meaning if Telegram has no usable premium icon at all.
     return ''.join(output) if changed else None
 
 
