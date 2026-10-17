@@ -64,6 +64,20 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
                       context.bot.edit_message_text.await_args.kwargs['text'])
         self.assertIsNone(context.bot.edit_message_text.await_args.kwargs['reply_markup'])
 
+    async def test_namangan_approval_keeps_region_until_export(self):
+        context, review, update = self.setup_review()
+        review['region'] = 'namangan'
+        review['group_id'] = '-2002'
+        update.effective_chat.id = -2002
+        await brand_review.on_review(update, context)
+        queued = context.bot_data['brand_sheets_outbox']['HM-000001']['payload']
+        self.assertEqual(queued['region'], 'namangan')
+        with patch.object(brand_sheets, 'configuration', return_value=('url', 'secret')), \
+             patch.object(brand_sheets, 'post_export', AsyncMock()) as send:
+            await brand_sheets.flush(context)
+        self.assertEqual(send.await_args.args[3]['region'], 'namangan')
+        self.assertEqual(review['status'], 'exported')
+
     async def test_failed_persistence_does_not_leave_approved_export(self):
         context, review, update = self.setup_review()
         with patch.object(brand_review, 'checkpoint', AsyncMock(return_value=False)):
