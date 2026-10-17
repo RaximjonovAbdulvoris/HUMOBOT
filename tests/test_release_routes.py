@@ -25,7 +25,7 @@ class ReleaseRouteTests(unittest.TestCase):
                            'NAMANGAN_OTHER_PARK_GROUP', 'TASHKENT_INCOMPLETE_GROUP',
                            'TASHKENT_OTHER_PARK_GROUP', 'ARCHIVE_GROUP',
                            'TASHKENT_ARCHIVE_GROUP'),
-                          ('-101', '', '-103', '-201', '', '-203', '-104', '-204',
+                          ('-101', '-102', '-103', '-201', '-202', '-203', '-104', '-204',
                            '-105', '-106', '-205', '-206', '-107', '-207')))
         values['SEPARATE_REGION_GROUPS'] = '1'
         self.assertEqual(group_routes(values)['TASHKENT_ARCHIVE_GROUP'], '-207')
@@ -41,9 +41,11 @@ class ReleaseRouteTests(unittest.TestCase):
                            'NAMANGAN_OTHER_PARK_GROUP', 'TASHKENT_INCOMPLETE_GROUP',
                            'TASHKENT_OTHER_PARK_GROUP', 'ARCHIVE_GROUP',
                            'TASHKENT_ARCHIVE_GROUP'),
-                          ('-101', '-102', '-103', '-201', '', '-203', '-104', '-204',
+                          ('-101', '-102', '-103', '-201', '-202', '-203', '-104', '-204',
                            '-105', '-106', '-205', '-206', '-107', '-207')))
         self.assertEqual(validate_routes(routes), [])
+        routes['TASHKENT_DRIVER_GROUP_2'] = ''
+        self.assertTrue(any('TASHKENT_DRIVER_GROUP_2' in issue for issue in validate_routes(routes)))
 
     def test_test_bot_overlapping_destinations_are_blocked(self):
         routes = {'DRIVER_GROUP_1': '-101', 'BRAND_GROUP': '-103',
