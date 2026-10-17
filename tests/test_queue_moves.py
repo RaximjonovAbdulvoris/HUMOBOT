@@ -13,6 +13,16 @@ from bot import presentation
 
 
 class QueueMoveTests(unittest.IsolatedAsyncioTestCase):
+    def test_legacy_review_queue_uses_only_three_controls(self):
+        for stage in ('incomplete', 'other'):
+            record = {'queue_stage': stage}
+            self.assertTrue(operator.is_review_record(record))
+            buttons = [button.callback_data for row in
+                       operator.build_operator_keyboard(9, review=operator.is_review_record(record)).inline_keyboard
+                       for button in row]
+            self.assertEqual(set(buttons), {'op:ready:9', 'op:delete:9', 'op:progress:9'})
+        self.assertFalse(operator.is_review_record({'queue_stage': 'main'}))
+
     def setUp(self):
         tmp=tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
