@@ -208,7 +208,7 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
                 f"<b>{regions.region_name(city)} — bog‘lanish</b>\n\n"
                 "📞 Aloqa: +998 78 113-80-81\n"
                 f"✈️ Telegram: {telegram}\n"
-                "📢 Telegram kanal: https://t.me/+knRCQZnC9UphNjky\n"
+                "📢 Telegram kanal: https://t.me/+p0yshFmkUpU2OGIy\n"
                 '📸 Instagram: <a href="https://www.instagram.com/humo_wb_taxi/">@humo_wb_taxi</a>')
             self.assertNotIn("+998 33 113-80-85", text)
             self.assertEqual(text.count("+998"), 1)
