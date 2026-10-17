@@ -131,12 +131,27 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(changed['inline_keyboard'][0][0]['icon_custom_emoji_id'], '23456')
         self.assertEqual(changed['inline_keyboard'][0][0]['callback_data'], 'op:ready:5')
 
-    def test_success_checks_stay_native_green(self):
+    def test_success_checks_stay_native_when_news_set_is_unavailable(self):
         self.assertIsNone(presentation.premium_id('✅'))
         self.assertEqual(premium_html('✅ *4 ta rasm qabul qilindi!*', 'Markdown'),
                          '✅ <b>4 ta rasm qabul qilindi!</b>')
         self.assertIsNone(premium_keyboard(InlineKeyboardMarkup([
             [InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])))
+
+    async def test_success_check_uses_only_the_selected_news_artwork(self):
+        async def get_set(name):
+            assets = ([N(emoji='✔️', custom_emoji_id='777')]
+                      if name == 'NewsEmoji' else
+                      [N(emoji='✅', custom_emoji_id='999')]
+                      if name == 'statuswb' else [])
+            return N(stickers=assets)
+        await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
+        self.assertEqual(presentation.premium_id('✅'), '777')
+        self.assertIn('emoji-id="777"', premium_html('✅ 4 ta rasm qabul qilindi', 'HTML'))
+        from bot.handlers.operator import build_operator_keyboard
+        ready = build_operator_keyboard(42).inline_keyboard[0][0]
+        self.assertEqual(ready.api_kwargs['icon_custom_emoji_id'], '777')
+        self.assertNotEqual(ready.api_kwargs['icon_custom_emoji_id'], '999')
 
     async def test_rejected_icon_retries_original_message(self):
         markup = InlineKeyboardMarkup([[InlineKeyboardButton('📄 Hujjatlar', callback_data='x')]])

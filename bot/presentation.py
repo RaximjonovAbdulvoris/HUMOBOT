@@ -78,10 +78,10 @@ _PACK_GLYPHS = {}
 
 def premium_id(emoji):
     """A glyph may only be replaced with the same glyph, never a random logo."""
-    # Packs may visually render ✅ as a blue badge. Confirmations must remain
-    # the native, predictably green Telegram checkmark.
+    # The owner specifically chose the ✔️ artwork from NewsEmoji for every
+    # confirmation. Other packs' ✅ entries can render as a blue badge.
     if emoji.replace('\ufe0f', '') == '✅':
-        return None
+        return _PACK_ICONS.get('READY')
     # One supplied pack labels a coin as 📞. Use a recognizable phone instead.
     if emoji.replace('\ufe0f', '') == '📞':
         return None
@@ -116,6 +116,7 @@ async def load_emoji_packs(application):
     except asyncio.TimeoutError:
         logger.warning('Emoji-set lookup timed out; available/cache icons retained.')
     preferred = {
+        'READY': ('✔️', '✔'),
         'PROGRESS_ACTIVE': ('🟡',), 'PROGRESS_IDLE': ('🔴',),
         'INCOMPLETE': ('📷',), 'OTHERPARK': ('🚕', '🚗'),
         'DELETE': ('🗑',),
@@ -140,7 +141,7 @@ async def load_emoji_packs(application):
         _PACK_ICONS['DRIVER'] = driver.custom_emoji_id
         _PACK_GLYPHS['DRIVER'] = '🚕'
     by_pack = {
-        'READY': ('statuswb', 'ApplicationEmoji'),
+        'READY': ('NewsEmoji',),
         'PROGRESS_ACTIVE': ('statuswb', 'ApplicationEmoji'),
         'PROGRESS_IDLE': ('statuswb', 'ApplicationEmoji'),
         'INCOMPLETE': ('statuswb', 'IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),
