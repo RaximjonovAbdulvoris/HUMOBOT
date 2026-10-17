@@ -5,13 +5,14 @@ arizalar buzilmasligi uchun bu holat yangi IDlar kiritilmaguncha saqlanadi.
 Bot Telegram guruhlarini o‘zi yarata olmaydi: avval guruhlar ochilib, bot
 administrator va xabar o‘chirish huquqiga ega bo‘lishi kerak.
 
-`.env.test` fayliga quyidagi **12 ta alohida** guruh IDsi kiritiladi.
-IDlar bir-birini takrorlamasin. Namangan uchun ikkinchi haydovchi guruhi va
-Toshkent uchun ikkinchi haydovchi guruhi ixtiyoriy.
+`.env.test` fayliga quyidagi **14 ta alohida** guruh IDsi kiritiladi:
+har hudud uchun 6 ta ariza guruhi va 1 ta arxiv. IDlar bir-birini
+takrorlamasin. Ikkala haydovchi guruhi ham har hududda majburiy.
 
 | Namangan | Toshkent |
 | --- | --- |
 | `DRIVER_GROUP_1` | `TASHKENT_DRIVER_GROUP_1` |
+| `DRIVER_GROUP_2` | `TASHKENT_DRIVER_GROUP_2` |
 | `BRAND_GROUP` | `TASHKENT_BRAND_GROUP` |
 | `NAMANGAN_SPECTRE_GROUP` | `TASHKENT_SPECTRE_GROUP` |
 | `NAMANGAN_INCOMPLETE_GROUP` | `TASHKENT_INCOMPLETE_GROUP` |
