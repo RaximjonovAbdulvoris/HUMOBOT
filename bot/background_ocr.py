@@ -95,7 +95,7 @@ async def enrich(application, code, applicant_id):
 
 
 async def _enrich(application, code, applicant_id):
-    from bot.handlers.operator import build_operator_keyboard
+    from bot.handlers.operator import build_operator_keyboard, is_review_record
     from bot.presentation import with_keyboard_fallback
     found = current_record(application, code, applicant_id)
     if found is None:
@@ -160,7 +160,7 @@ async def _enrich(application, code, applicant_id):
                     await with_keyboard_fallback(application.bot.edit_message_text,
                         chat_id=record['group_chat_id'], message_id=record['kb_msg_id'], text=text,
                         parse_mode='HTML', reply_markup=build_operator_keyboard(
-                            applicant_id, in_progress=progress, review=bool(record.get('queue_kind'))))
+                            applicant_id, in_progress=progress, review=is_review_record(record)))
                 except Exception as error:
                     if 'message is not modified' not in str(error).lower():
                         raise
