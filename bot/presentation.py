@@ -78,6 +78,10 @@ _PACK_GLYPHS = {}
 
 def premium_id(emoji):
     """A glyph may only be replaced with the same glyph, never a random logo."""
+    # Packs may visually render ✅ as a blue badge. Confirmations must remain
+    # the native, predictably green Telegram checkmark.
+    if emoji.replace('\ufe0f', '') == '✅':
+        return None
     return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
@@ -109,7 +113,7 @@ async def load_emoji_packs(application):
     except asyncio.TimeoutError:
         logger.warning('Emoji-set lookup timed out; available/cache icons retained.')
     preferred = {
-        'READY': ('✅', '☑', '✔'), 'PROGRESS': ('⏳', '🔄', '🕒'),
+        'PROGRESS': ('⏳', '🔄', '🕒'),
         'INCOMPLETE': ('📄', '📷', '⚠'), 'OTHERPARK': ('🚕', '🚗', '🔁'),
         'DELETE': ('🗑', '❌', '✖'),
         'BRAND': ('🎨', '🚗'),

@@ -177,6 +177,10 @@ must have an active Telegram Premium subscription (or qualifying extra bot
 usernames) for Telegram to accept custom emoji in bot messages. Old menu
 buttons remain accepted after the labels change.
 
+Confirmation checkmarks (`✅`) deliberately stay as Telegram's native green
+emoji: a visually blue custom check in one of the selected packs must not
+replace a green success mark in photo progress or acceptance messages.
+
 Server update for the existing test service:
 
 ```sh

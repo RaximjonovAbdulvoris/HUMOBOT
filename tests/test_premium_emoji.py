@@ -31,16 +31,18 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
             return PremiumEmojiBot('123:test')
 
     def test_html_keeps_markup_and_premium_emoji(self):
-        result = premium_html('✅ <b>Tayyor</b> <code>📄</code>', 'HTML')
-        self.assertIn('<tg-emoji emoji-id="12345">✅</tg-emoji>', result)
+        result = premium_html('✅ <b>Tayyor</b> 📄 <code>📄</code>', 'HTML')
+        self.assertIn('<tg-emoji emoji-id="23456">📄</tg-emoji>', result)
+        self.assertNotIn('emoji-id="12345"', result)
+        self.assertIn('✅', result)
         self.assertIn('<b>Tayyor</b>', result)
         self.assertIn('<code>📄</code>', result)
 
     def test_markdown_keeps_bold_and_unmapped_emoji_if_sets_fail(self):
-        result = premium_html('✅ *Tayyor* 📝', 'Markdown')
+        result = premium_html('✅ *Tayyor* 📄 📝', 'Markdown')
         self.assertIn('<b>Tayyor</b>', result)
         self.assertIn('📝', result)
-        self.assertIn('emoji-id="12345"', result)
+        self.assertIn('emoji-id="23456"', result)
 
     def test_unrelated_logo_never_replaces_location_or_document_text(self):
         presentation._PACK_ICONS.update({'DRIVER': '34567', 'CONTACT': '45678'})
@@ -86,18 +88,25 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
 
     def test_button_click_data_survives_premium_render(self):
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton('📄 Hujjatlar', callback_data='op:ready:5')]])
         changed = premium_keyboard(markup)
-        self.assertEqual(changed['inline_keyboard'][0][0]['text'], 'Tayyor')
-        self.assertEqual(changed['inline_keyboard'][0][0]['icon_custom_emoji_id'], '12345')
+        self.assertEqual(changed['inline_keyboard'][0][0]['text'], 'Hujjatlar')
+        self.assertEqual(changed['inline_keyboard'][0][0]['icon_custom_emoji_id'], '23456')
         self.assertEqual(changed['inline_keyboard'][0][0]['callback_data'], 'op:ready:5')
 
+    def test_success_checks_stay_native_green(self):
+        self.assertIsNone(presentation.premium_id('✅'))
+        self.assertEqual(premium_html('✅ *4 ta rasm qabul qilindi!*', 'Markdown'),
+                         '✅ <b>4 ta rasm qabul qilindi!</b>')
+        self.assertIsNone(premium_keyboard(InlineKeyboardMarkup([
+            [InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])))
+
     async def test_rejected_icon_retries_original_message(self):
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='x')]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton('📄 Hujjatlar', callback_data='x')]])
         sender = AsyncMock(side_effect=[BadRequest('custom emoji not allowed'), {'ok': True}])
         bot = self.bot()
         with patch.object(ExtBot, '_post', sender):
-            await bot._post('sendMessage', {'chat_id': 5, 'text': '✅ *Tayyor*',
+            await bot._post('sendMessage', {'chat_id': 5, 'text': '📄 *Hujjatlar*',
                                             'parse_mode': 'Markdown', 'reply_markup': markup})
         self.assertEqual(sender.await_count, 2)
         self.assertEqual(sender.await_args_list[0].args[1]['parse_mode'], 'HTML')
@@ -117,11 +126,11 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_real_send_path_preserves_button_action(self):
         bot = self.bot()
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton('📄 Hujjatlar', callback_data='op:ready:5')]])
         response = {'message_id': 1, 'date': 0, 'chat': {'id': 5, 'type': 'private'}, 'text': 'Tayyor'}
         with patch.object(PremiumEmojiBot, '_do_post', AsyncMock(return_value=response)) as sent:
-            await bot.send_message(5, '✅ *Tayyor*', parse_mode='Markdown', reply_markup=markup)
+            await bot.send_message(5, '📄 *Hujjatlar*', parse_mode='Markdown', reply_markup=markup)
         payload = sent.await_args.kwargs['data']
-        self.assertIn('<tg-emoji emoji-id="12345">✅</tg-emoji>', payload['text'])
-        self.assertIn('<b>Tayyor</b>', payload['text'])
+        self.assertIn('<tg-emoji emoji-id="23456">📄</tg-emoji>', payload['text'])
+        self.assertIn('<b>Hujjatlar</b>', payload['text'])
         self.assertEqual(payload['reply_markup']['inline_keyboard'][0][0]['callback_data'], 'op:ready:5')
