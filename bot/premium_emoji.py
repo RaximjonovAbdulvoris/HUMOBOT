@@ -14,6 +14,7 @@ from bot.presentation import premium_id, _PACK_ICONS
 
 _TAGS = re.compile(r'(<[^>]+>)')
 _MARKDOWN = re.compile(r'\*([^*\n]+)\*|_([^_\n]+)_|`([^`\n]+)`')
+_CUSTOM_EMOJI = re.compile(r'<tg-emoji\s+emoji-id="[0-9]+">(.*?)</tg-emoji>', re.S)
 _TEXT_ENDPOINTS = {'sendMessage', 'editMessageText', 'sendPhoto',
                    'editMessageCaption', 'sendVideo', 'sendDocument', 'sendAnimation',
                    'editMessageReplyMarkup', 'sendMediaGroup'}
@@ -159,6 +160,30 @@ def premium_keyboard(markup):
     return data if changed else None
 
 
+def plain_keyboard(markup):
+    """Preserve button actions while removing optional visual Bot API fields."""
+    data = markup.to_dict() if hasattr(markup, 'to_dict') else markup
+    if not isinstance(data, dict):
+        return None
+    rows = data.get('keyboard') or data.get('inline_keyboard')
+    if rows is None:
+        return None
+    cleaned = {key: value for key, value in data.items() if key not in ('style', 'icon_custom_emoji_id')}
+    changed = False
+    result_rows = []
+    for row in rows:
+        result_row = []
+        for button in row:
+            if not isinstance(button, dict):
+                return None
+            changed |= 'style' in button or 'icon_custom_emoji_id' in button
+            result_row.append({key: value for key, value in button.items()
+                               if key not in ('style', 'icon_custom_emoji_id')})
+        result_rows.append(result_row)
+    cleaned['keyboard' if 'keyboard' in data else 'inline_keyboard'] = result_rows
+    return cleaned if changed else None
+
+
 class PremiumEmojiBot(ExtBot):
     async def _post(self, endpoint, data=None, **kwargs):
         original = data
@@ -196,5 +221,17 @@ class PremiumEmojiBot(ExtBot):
                 try:
                     return await super()._post(endpoint, changed, **kwargs)
                 except BadRequest:
-                    return await super()._post(endpoint, original, **kwargs)
-        return await super()._post(endpoint, original, **kwargs)
+                    pass
+        try:
+            return await super()._post(endpoint, original, **kwargs)
+        except BadRequest:
+            fallback = plain_keyboard(original.get('reply_markup')) if original else None
+            safe = dict(original)
+            if fallback is not None:
+                safe['reply_markup'] = fallback
+            for field in ('text', 'caption'):
+                if isinstance(safe.get(field), str):
+                    safe[field] = _CUSTOM_EMOJI.sub(lambda match: match.group(1), safe[field])
+            if fallback is None and safe == original:
+                raise
+            return await super()._post(endpoint, safe, **kwargs)

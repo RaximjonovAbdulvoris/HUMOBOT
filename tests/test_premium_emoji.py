@@ -12,7 +12,7 @@ from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from bot import presentation
-from bot.premium_emoji import PremiumEmojiBot, premium_html, premium_keyboard
+from bot.premium_emoji import PremiumEmojiBot, premium_html, premium_keyboard, plain_keyboard
 
 
 class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
@@ -174,6 +174,28 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sender.await_args_list[0].args[1]['parse_mode'], 'HTML')
         self.assertEqual(sender.await_args_list[1].args[1]['parse_mode'], 'Markdown')
         self.assertIs(sender.await_args_list[1].args[1]['reply_markup'], markup)
+
+    async def test_rejected_original_icon_retries_plain_contact_button(self):
+        presentation._PACK_ICONS['CONTACT'] = '777'
+        markup = presentation.contact_button()
+        from telegram import ReplyKeyboardMarkup
+        keyboard = ReplyKeyboardMarkup([[markup]], resize_keyboard=True)
+        plain = plain_keyboard(keyboard)
+        self.assertTrue(plain['keyboard'][0][0]['request_contact'])
+        self.assertNotIn('icon_custom_emoji_id', plain['keyboard'][0][0])
+        sender = AsyncMock(side_effect=[BadRequest('icon rejected'), {'ok': True}])
+        with patch.object(ExtBot, '_post', sender):
+            await self.bot()._post('sendMessage', {'chat_id': 5, 'text': 'Phone',
+                                                   'reply_markup': keyboard})
+        self.assertEqual(sender.await_count, 2)
+        self.assertTrue(sender.await_args.args[1]['reply_markup']['keyboard'][0][0]['request_contact'])
+
+    async def test_invalid_explicit_custom_emoji_falls_back_to_glyph(self):
+        sender = AsyncMock(side_effect=[BadRequest('invalid custom emoji'), {'ok': True}])
+        with patch.object(ExtBot, '_post', sender):
+            await self.bot()._post('sendMessage', {'chat_id': 5,
+                'text': '<tg-emoji emoji-id="123">📱</tg-emoji> Telefon', 'parse_mode': 'HTML'})
+        self.assertEqual(sender.await_args.args[1]['text'], '📱 Telefon')
 
     async def test_album_captions_keep_photo_and_style(self):
         sender = AsyncMock(return_value=[])
