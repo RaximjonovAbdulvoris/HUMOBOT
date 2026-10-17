@@ -22,7 +22,13 @@ class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
     def test_layout_has_five_actions_without_comment(self):
         buttons = [b for row in operator.build_operator_keyboard(9).inline_keyboard for b in row]
         self.assertEqual({b.callback_data for b in buttons},
-                         {f'op:{a}:9' for a in ('ready','progress','incomplete','otherpark','delete')})
+                         {f'op:{a}:9' for a in ('ready','progress','incomplete','otherpark','delete','download')})
+
+    async def test_download_callback_uses_only_the_resolved_application(self):
+        bot,ctx,key,msg=self.setup_case()
+        with patch('bot.application_download.send_archive', new_callable=AsyncMock) as send:
+            await operator.on_operator_button(_update('op:download:9',msg),ctx)
+        send.assert_awaited_once_with(bot, ctx.bot_data['applications'][key], -1001, 20)
 
     async def test_notice_follows_move_and_old_buttons_cannot_duplicate_it(self):
         for action in ('incomplete','otherpark'):
