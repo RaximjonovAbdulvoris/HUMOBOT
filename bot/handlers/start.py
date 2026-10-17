@@ -59,7 +59,7 @@ MAIN_KEYBOARD = main_keyboard(NAMANGAN)
 CONTACT_TEXT = (
     "📞 Aloqa: +998 78 113-80-81\n"
     "✈️ Telegram: @humo_Namangan\n"
-    "📢 Telegram kanal: https://t.me/+knRCQZnC9UphNjky\n"
+    "📢 Telegram kanal: https://t.me/+p0yshFmkUpU2OGIy\n"
     '📸 Instagram: <a href="https://www.instagram.com/humo_wb_taxi/">@humo_wb_taxi</a>'
 )
 TASHKENT_CONTACT_TEXT = CONTACT_TEXT.replace("@humo_Namangan", "@wb_taxi_Humo")
