@@ -7,6 +7,7 @@ from types import SimpleNamespace as N
 from unittest.mock import AsyncMock, patch
 import httpx
 from bot import brand_sheets as sheets
+from bot import brand_review
 
 URL = 'https://script.google.com/macros/s/testdeployment/exec'
 SECRET = 'synthetic-test-secret-not-real-123456'
@@ -20,6 +21,9 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
         sheets.enqueue(ctx, {'b_name': '=1+1', 'b_phone': '+998000000000',
             'b_model': 'TEST', 'b_year': '2020', 'b_color': 'Oq', 'b_plate': '01A123BC'},
             N(username='test', id=123), 'HM-000001', 'tashkent', approved=True)
+        review = brand_review.stage_review(ctx, {}, 'HM-000001', 'tashkent', -1001, 'Test', 123)
+        review['status'] = 'approved'
+        review['message_id'] = 10
 
     def test_signature_covers_timestamp_and_payload(self):
         body = sheets.signed({'code': 'HM-000001', 'row': ['example']}, SECRET, 1700000000)
@@ -90,23 +94,24 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
             for kind in ('brand', 'spectre'):
                 ctx = self.context()
                 sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000001', region,
-                               kind=kind, approved=(kind == 'brand'))
+                               kind=kind, approved=True)
                 payload = ctx.bot_data['brand_sheets_outbox']['HM-000001']['payload']
                 self.assertEqual((payload['region'], payload['kind']), (region, kind))
         with self.assertRaises(ValueError):
             sheets.enqueue(self.context(), {}, N(username=None, id=1), 'HM-000001', 'unknown', approved=True)
 
-    async def test_brand_requires_approval_even_for_legacy_outbox(self):
+    async def test_both_kinds_require_approval_even_for_legacy_outbox(self):
         ctx = self.context()
-        with self.assertRaises(ValueError):
-            sheets.enqueue(ctx, {}, N(id=1), 'HM-000001', 'tashkent')
-        ctx.bot_data['brand_sheets_outbox'] = {'HM-000001': {
-            'status': 'pending', 'payload': {'code': 'HM-000001', 'kind': 'brand',
-                'region': 'tashkent', 'fields': {}}}}
-        with patch.object(sheets, 'configuration', return_value=(URL, SECRET)), \
-             patch.object(sheets, 'post_export', AsyncMock()) as send:
-            await sheets.flush(ctx)
-        send.assert_not_awaited()
+        for kind in ('brand', 'spectre'):
+            with self.assertRaises(ValueError):
+                sheets.enqueue(ctx, {}, N(id=1), 'HM-000001', 'tashkent', kind=kind)
+            ctx.bot_data['brand_sheets_outbox'] = {'HM-000001': {
+                'status': 'pending', 'payload': {'code': 'HM-000001', 'kind': kind,
+                    'region': 'tashkent', 'fields': {}}}}
+            with patch.object(sheets, 'configuration', return_value=(URL, SECRET)), \
+                 patch.object(sheets, 'post_export', AsyncMock()) as send:
+                await sheets.flush(ctx)
+            send.assert_not_awaited()
 
     def test_queued_v1_brand_payload_migrates_without_losing_route(self):
         old = {'code': 'HM-000001', 'row': ['HM-000001', '2026-01-01', 'Namangan shahri',
@@ -128,7 +133,10 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_region_does_not_block_spectre_export(self):
         ctx = self.context()
         self.enqueue(ctx)
-        sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000002', 'namangan', kind='spectre')
+        sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000002', 'namangan', kind='spectre', approved=True)
+        review = brand_review.stage_review(ctx, {}, 'HM-000002', 'namangan', -1002, 'Test', 1, kind='spectre')
+        review['status'] = 'approved'
+        review['message_id'] = 20
         with patch.object(sheets, 'configuration', return_value=(URL, SECRET)), \
              patch.object(sheets, 'post_export', AsyncMock(side_effect=[RuntimeError(), None])):
             await sheets.flush(ctx)
