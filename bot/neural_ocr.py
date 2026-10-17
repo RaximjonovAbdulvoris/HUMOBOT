@@ -45,7 +45,7 @@ async def _worker(payload=None):
         await process.wait()
     timed_out = False
     try:
-        await asyncio.wait_for(communicate(), timeout=10)
+        await asyncio.wait_for(communicate(), timeout=20)
     except asyncio.TimeoutError:
         timed_out = True
     finally:

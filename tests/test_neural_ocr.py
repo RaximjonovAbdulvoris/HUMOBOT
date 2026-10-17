@@ -88,7 +88,32 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(process.returncode, -9)
         self.assertNotIn('TELEGRAM_BOT_TOKEN', spawn.call_args.kwargs['env'])
 
+    async def test_worker_budget_allows_twenty_seconds(self):
+        process = N(returncode=0, stdin=N(write=lambda _: None, drain=AsyncMock(), close=lambda: None),
+            stdout=N(readline=AsyncMock(return_value=b'')), wait=AsyncMock(), kill=lambda: None)
+        with patch.object(asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), \
+             patch.object(asyncio, 'wait_for', side_effect=lambda awaitable, timeout: asyncio.ensure_future(awaitable)) as wait:
+            await neural._worker([])
+        self.assertEqual(wait.call_args.kwargs['timeout'], 20)
+
 class LicenceIdentityTests(unittest.TestCase):
+    def test_enhanced_pass_fills_missing_field_without_overriding_conflict(self):
+        from bot.neural_ocr_worker import read_document
+        from PIL import Image
+        from io import BytesIO
+        image = Image.new('RGB', (960, 1280), 'white')
+        buffer = BytesIO()
+        image.save(buffer, 'PNG')
+        def detected(text, y):
+            return ([[300, y], [650, y], [650, y + 30], [300, y + 30]], text, .99)
+        first = ([detected('5.AB1234567', 300)], None)
+        second = ([detected('5.AB1234568', 300), detected('4d12345678901234', 350)], None)
+        engine = unittest.mock.Mock(side_effect=[first, second])
+        values = read_document(engine, buffer.getvalue(), 'license_front')
+        self.assertEqual(engine.call_count, 2)
+        self.assertEqual(values['pinfl'], '12345678901234')
+        self.assertIsNone(values['license_number'])
+
     def test_complete_field_three_does_not_need_a_fragile_crop(self):
         from bot.neural_ocr_worker import read_document
         from PIL import Image

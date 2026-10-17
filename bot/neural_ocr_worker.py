@@ -5,7 +5,7 @@ import json
 import re
 import sys
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 from bot.document_ocr import FIELDS, normalize, guard_identifiers
 from bot.fast_ocr import Word, DATE, SERIAL
 
@@ -211,6 +211,29 @@ def read_document(engine, raw, source, emit=None):
                 # numbered field 3 has precedence when it already parsed cleanly.
                 if value and not values[key]:
                     values[key] = value
+    # Spend the extra time only when the first pass did not read the fields
+    # required from this document. Local contrast restores dim text and the
+    # mild sharpening can separate letters softened by camera focus.
+    required = ('full_name', 'pinfl', 'birth_date', 'birth_place',
+                'license_number', 'license_expiry') if source == 'license_front' else ('vehicle_registration',)
+    if any(not values.get(key) for key in required):
+        grayscale = ImageOps.autocontrast(image.convert('L'), cutoff=1)
+        enhanced = grayscale.filter(ImageFilter.UnsharpMask(radius=1, percent=130, threshold=2)).convert('RGB')
+        second, _ = engine(np.array(ImageOps.invert(enhanced))[:, :, ::-1].copy())
+        other = []
+        for box, text, confidence in second or []:
+            left, top = min(p[0] for p in box), min(p[1] for p in box)
+            other.append(Word(text, confidence * 100, left, top,
+                max(p[0] for p in box) - left, max(p[1] for p in box) - top))
+        alternate = fields_from_rows(other, source, image.width, image.height)
+        if source == 'license_front':
+            alternate['full_name'] = licence_name(other)
+        for key in required:
+            if alternate.get(key):
+                if values.get(key) and values[key] != alternate[key]:
+                    values[key] = None  # Never silently prefer conflicting readings.
+                elif not values.get(key):
+                    values[key] = alternate[key]
     return guard_identifiers(values)[0]
 
 
