@@ -115,9 +115,13 @@ class LicenceIdentityTests(unittest.TestCase):
         box = [[10, 10], [180, 10], [180, 45], [10, 45]]
         engine = Mock(side_effect=[([(box, 'AB1234567', .99)], None)] * 3 +
                                   [([(box, 'AB1234568', .99)], None)])
-        self.assertIsNone(refine_registration(engine, Image.new('RGB', (960, 1280))))
+        image = Image.new('RGB', (960, 1280))
+        candidate = row('AB1234567', x=650, y=820, width=140, height=30)
+        self.assertIsNone(refine_registration(engine, image, [candidate]))
         engine = Mock(return_value=([(box, 'AB1234567', .99)], None))
-        self.assertEqual(refine_registration(engine, Image.new('RGB', (960, 1280))), 'AB1234567')
+        self.assertEqual(refine_registration(engine, image, [candidate]), 'AB1234567')
+        self.assertLess(engine.call_args.args[0].shape[0], 300)
+        self.assertIsNone(refine_registration(engine, image, []))
 
     def test_enhanced_pass_fills_missing_field_without_overriding_conflict(self):
         from bot.neural_ocr_worker import read_document
