@@ -121,7 +121,7 @@ async def load_emoji_packs(application):
         'INCOMPLETE': ('📷',), 'OTHERPARK': ('🚕', '🚗'),
         'DELETE': ('🗑',),
         'BRAND': ('🎨', '🚗'),
-        'CONTACT': ('📱', '☎'), 'LOCATION': ('📍', '🗺', '🏢'),
+        'LOCATION': ('📍', '🗺', '🏢'),
         'SPECTRE': ('⚡',), 'REGION': ('🔄', '🔁', '🗺'),
     }
     # A sticker's own Unicode equivalent is the only safe match for message
@@ -148,7 +148,6 @@ async def load_emoji_packs(application):
         'OTHERPARK': ('statuswb', 'FinanceEmoji', 'IslomjonAnimeEmoji'),
         'DELETE': ('statuswb', 'ApplicationEmoji'),
         'BRAND': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
-        'CONTACT': ('IslomjonAnimeEmoji', 'NewsEmoji'),
         'LOCATION': ('IslomjonAnimeEmoji', 'NewsEmoji', 'ApplicationEmoji'),
         'SPECTRE': ('FinanceEmoji', 'TONEmoji'),
         'REGION': ('IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),

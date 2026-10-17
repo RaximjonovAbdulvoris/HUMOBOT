@@ -83,13 +83,13 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
         self.assertEqual(presentation.premium_id('📝'), None)
         self.assertIsNone(presentation.premium_id('📞'))
-        self.assertEqual(presentation._PACK_ICONS['CONTACT'], '777')
+        self.assertNotIn('CONTACT', presentation._PACK_ICONS)
         self.assertEqual(presentation._PACK_ICONS['SPECTRE'], '555')
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][0].api_kwargs['icon_custom_emoji_id'], '444')
         self.assertEqual(menu[1][1].api_kwargs['icon_custom_emoji_id'], '555')
-        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], '777')
+        self.assertEqual(menu[2][0].text, "📞 Bog'lanish uchun")
         self.assertIn('emoji-id="333"', presentation.premium_markup('DRIVER', '🚕'))
         self.assertIn('emoji-id="444"', presentation.premium_markup('BRAND', '🎨'))
         self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
@@ -105,7 +105,7 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][1].text, '⚡ Spectre Energyga ariza')
-        self.assertEqual(menu[2][0].text, "📱 Bog'lanish uchun")
+        self.assertEqual(menu[2][0].text, "📞 Bog'lanish uchun")
 
     async def test_operator_icons_follow_the_actual_status(self):
         assets = [N(emoji=glyph, custom_emoji_id=icon) for glyph, icon in

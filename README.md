@@ -181,7 +181,7 @@ Confirmation checkmarks (`✅`) use only the owner's selected `✔️` custom em
 from `NewsEmoji`. If that set is unavailable or has no matching `✔️`, the
 native green `✅` remains; a blue badge from another pack cannot replace it.
 The supplied pack's `📞` entry appears as a coin, so contact prompts use
-`📱` and only a matching phone asset. Spectre only accepts an `⚡` asset;
+Telegram's native handset `📞` without custom substitution. Spectre only accepts an `⚡` asset;
 a battery `🔋` cannot stand in for energy. Operator progress icons match
 their actual yellow/red state; missing matches keep the original emoji.
 
