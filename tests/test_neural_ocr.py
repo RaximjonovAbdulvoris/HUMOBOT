@@ -166,7 +166,7 @@ class LicenceIdentityTests(unittest.TestCase):
         self.assertIsNone(licence_name([w for w in words if w.text != '2']))
         self.assertIsNone(licence_name(words + [row('CONFLICT', x=322, y=101, height=28)]))
 
-    def test_licence_name_includes_second_line_of_field_two(self):
+    def test_licence_name_excludes_patronymic_below_field_two(self):
         from bot.neural_ocr_worker import licence_identity
         words = [row('1', x=290, y=100, width=20, height=28, confidence=92),
                  row('EXAMPLE', x=320, y=100, height=28),
@@ -174,8 +174,8 @@ class LicenceIdentityTests(unittest.TestCase):
                  row('PERSON', x=320, y=135, height=28),
                  row("SECONDO'G'LI", x=321, y=172, height=28, confidence=89),
                  row('3.TEST CITY 01.02.1990', x=290, y=207, height=28)]
-        self.assertEqual(licence_identity(words), ('EXAMPLE', "PERSON SECOND O'G'LI"))
-        self.assertIsNone(licence_identity(words + [row('CONFLICT', x=321, y=176, height=28)]))
+        self.assertEqual(licence_identity(words), ('EXAMPLE', 'PERSON'))
+        self.assertEqual(licence_identity(words + [row('CONFLICT', x=321, y=176, height=28)]), ('EXAMPLE', 'PERSON'))
 
     def test_repeated_ocr_disagreement_stays_unknown(self):
         from bot.neural_ocr_worker import unanimous
