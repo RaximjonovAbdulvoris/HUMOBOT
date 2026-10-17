@@ -49,9 +49,11 @@ def normalize_payload(payload):
 def enqueue(context, data, user, code, region, kind='brand', approved=False):
     if kind not in ('brand', 'spectre'):
         raise ValueError('Unknown export kind')
-    if kind == 'brand' and not approved:
-        raise ValueError('Brand export requires operator approval')
+    if not approved:
+        raise ValueError('Export requires operator approval')
     outbox = context.bot_data.setdefault('brand_sheets_outbox', {})
+    if code in outbox and outbox[code].get('payload', {}).get('kind') != kind:
+        raise ValueError('Export kind changed')
     item = outbox.setdefault(code, {'status': 'pending', 'payload': {
         'code': code, 'kind': kind, 'region': region_key(region),
         'created_at': datetime.now(ZoneInfo('Asia/Tashkent')).isoformat(timespec='seconds'),
@@ -59,7 +61,7 @@ def enqueue(context, data, user, code, region, kind='brand', approved=False):
             ('name', 'b_name'), ('phone', 'b_phone'), ('model', 'b_model'),
             ('year', 'b_year'), ('color', 'b_color'), ('plate', 'b_plate'))},
     }})
-    if kind == 'brand' and item.get('status') == 'pending':
+    if item.get('status') == 'pending':
         item['approved'] = True
 
 
@@ -108,12 +110,12 @@ async def flush(context):
                     continue
                 try:
                     payload = normalize_payload(item['payload'])
-                    # Older persisted brand outbox entries predate approval.
-                    # Leave them untouched instead of exporting without consent.
-                    if payload['kind'] == 'brand' and not item.get('approved'):
+                    # Legacy Spectre entries were queued without operator review.
+                    # No application may enter Sheets without an approved post.
+                    if payload['kind'] not in ('brand', 'spectre') or not item.get('approved'):
                         continue
                     review = context.bot_data.get('brand_reviews', {}).get(code)
-                    if payload['kind'] == 'brand' and review:
+                    if review and review.get('kind', 'brand') == payload['kind']:
                         from bot.background_ocr import control_lock
                         async with control_lock(review['group_id'], review['message_id'] or 0):
                             if review['status'] != 'approved' or item.get('status') != 'pending':
@@ -124,12 +126,6 @@ async def flush(context):
                             item.pop('approved', None)
                             review['status'] = 'exported'
                             await _save(context)
-                    else:
-                        await post_export(client, *config, payload)
-                        item['status'] = 'sent'
-                        item.pop('payload', None)
-                        item.pop('approved', None)
-                        await _save(context)
                 except Exception as error:
                     # The durable item remains pending; retrying the same code
                     # cannot duplicate a row when using the supplied receiver.
