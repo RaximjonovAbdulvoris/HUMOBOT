@@ -1,6 +1,6 @@
 import logging
 from bot.application_ids import application_code
-from bot.presentation import send_brand_sticker
+from bot.presentation import menu_button, send_brand_sticker
 from html import escape as h
 
 from telegram import (
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 BRAND_WARN, BRAND_NAME, BRAND_PHONE, BRAND_MODEL, BRAND_YEAR, BRAND_COLOR, BRAND_PLATE = range(100, 107)
 BRAND_JOIN = 107
 CONTINUE_BTN = "✅ Davom etish"
-CONTINUE_KB = ReplyKeyboardMarkup([[CONTINUE_BTN]], resize_keyboard=True, one_time_keyboard=True)
+CONTINUE_KB = ReplyKeyboardMarkup([[menu_button(CONTINUE_BTN, icon="READY")]], resize_keyboard=True, one_time_keyboard=True)
 BRAND_JOIN_KEYBOARD = subscription_keyboard("brand:check_membership")
 SPECTRE_JOIN_KEYBOARD = subscription_keyboard("spectre:check_membership")
 
@@ -355,11 +355,11 @@ def build_brand_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[
             MessageHandler(
-                filters.ChatType.PRIVATE & filters.Regex(f"^{MENU_BRAND}$"),
+                filters.ChatType.PRIVATE & filters.Regex(r"^(?:🎨 )?Brend Ariza$"),
                 start_brand,
             ),
             MessageHandler(
-                filters.ChatType.PRIVATE & filters.Regex(f"^{MENU_SPECTRE}$"),
+                filters.ChatType.PRIVATE & filters.Regex(r"^(?:⚡ )?Spectre Energyga ariza$"),
                 start_spectre,
             ),
         ],
@@ -374,7 +374,7 @@ def build_brand_conversation() -> ConversationHandler:
                 MessageHandler(~filters.COMMAND, check_membership),
             ],
             BRAND_WARN: [
-                MessageHandler(filters.Regex(f"^{CONTINUE_BTN}$"), brand_warn),
+                MessageHandler(filters.Regex(r"^(?:✅ )?Davom etish$"), brand_warn),
                 MessageHandler(~filters.COMMAND, brand_warn_wrong),
             ],
             BRAND_NAME: _text_state(brand_get_name, BRAND_NAME),

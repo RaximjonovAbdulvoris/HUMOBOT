@@ -158,9 +158,18 @@ At startup, actual custom emoji IDs are fetched from `ApplicationEmoji`,
 `FinanceEmoji`, `TONEmoji`, and `NewsEmoji`. IDs are chosen by matching symbols
 and fall back to the requested set if no matching symbol is available. The
 results are cached in bot persistence. Explicit `PREMIUM_ICON_*` values still
-override automatic choices. Unavailable sets fall back to cached/standard emoji;
-a Telegram rejection of custom icons retries with ordinary working controls.
+override automatic choices. Unavailable sets can use cached IDs; a Telegram
+rejection of custom icons retries with the original working controls.
 These links identify custom emoji sets, not standalone sticker packs.
+
+Outgoing text, photo captions and keyboard labels use matching Premium emoji
+from these sets. Existing Markdown/HTML emphasis and button actions are kept.
+If a symbol has no match in the selected sets, it is shown as plain text
+without a stock emoji; on Telegram clients without custom emoji support or
+when Telegram rejects an icon, the original message is retried. The bot owner
+must have an active Telegram Premium subscription (or qualifying extra bot
+usernames) for Telegram to accept custom emoji in bot messages. Old menu
+buttons remain accepted after the labels change.
 
 Server update for the existing test service:
 

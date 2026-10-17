@@ -15,12 +15,12 @@ from bot.subscription import (
     subscription_keyboard,
 )
 
-MENU_DRIVER = "📝 Ulanish uchun Ariza"
-MENU_BRAND = "🎨 Brend Ariza"
-MENU_CONTACT = "📞 Bog'lanish uchun"
-MENU_OFFICE = "📍 Ofis manzili"
-MENU_SPECTRE = "⚡ Spectre Energyga ariza"
-MENU_REGION = "🔄 Hududni almashtirish"
+MENU_DRIVER = "Ulanish uchun Ariza"
+MENU_BRAND = "Brend Ariza"
+MENU_CONTACT = "Bog'lanish uchun"
+MENU_OFFICE = "Ofis manzili"
+MENU_SPECTRE = "Spectre Energyga ariza"
+MENU_REGION = "Hududni almashtirish"
 OFFICE_PHOTO = Path(__file__).resolve().parents[1] / "templates" / "office.png"
 TASHKENT_OFFICE_PHOTO = OFFICE_PHOTO.with_name("office_tashkent.png")
 OFFICE_CAPTION = (
@@ -44,10 +44,10 @@ TASHKENT_OFFICE_KEYBOARD = InlineKeyboardMarkup([
 ])
 
 def main_keyboard(region: str) -> ReplyKeyboardMarkup:
-    rows = [[menu_button(MENU_DRIVER, "success")],
-            [menu_button(MENU_BRAND), menu_button(MENU_SPECTRE)],
-            [menu_button(MENU_CONTACT), menu_button(MENU_OFFICE)],
-            [menu_button(MENU_REGION)]]
+    rows = [[menu_button(MENU_DRIVER, "success", emoji="📝")],
+            [menu_button(MENU_BRAND, emoji="🎨"), menu_button(MENU_SPECTRE, emoji="⚡")],
+            [menu_button(MENU_CONTACT, emoji="📞"), menu_button(MENU_OFFICE, emoji="📍")],
+            [menu_button(MENU_REGION, emoji="🔄")]]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -280,7 +280,7 @@ async def show_office(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 def build_office_handler() -> MessageHandler:
-    return MessageHandler(filters.ChatType.PRIVATE & filters.Regex(f"^{MENU_OFFICE}$"), show_office)
+    return MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r"^(?:📍 )?Ofis manzili$"), show_office)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

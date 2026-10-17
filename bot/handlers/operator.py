@@ -58,7 +58,7 @@ def build_operator_keyboard(
         return styled_button(label, action=f"op:{action}:{applicant_user_id}",
                              style=style, icon=action.upper())
     rows = [[button("✅ Tayyor", "ready"),
-             button("Jarayonda🟡" if in_progress else "Jarayonda🔴", "progress")]]
+             button("Jarayonda (faol) 🟡" if in_progress else "Jarayonda (bo‘sh) 🔴", "progress")]]
     if not review:
         rows.append([button("📷 Chala rasm", "incomplete"), button("🚕 Boshqa park", "otherpark")])
     rows.append([button("🗑 O‘chirish", "delete")])

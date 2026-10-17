@@ -15,8 +15,14 @@ def button(label, *, action=None, url=None, style='primary', icon=None):
     return InlineKeyboardButton(label, callback_data=action, url=url, api_kwargs=extra)
 
 
-def menu_button(label, style='primary'):
-    return KeyboardButton(label, api_kwargs={'style': style})
+def menu_button(label, style='primary', icon=None, emoji=None):
+    extra = {'style': style}
+    emoji_id = (premium_id(emoji) if emoji else None) or (
+        os.environ.get(f'PREMIUM_ICON_{icon}', '') or _PACK_ICONS.get(icon, '')
+        if icon else '')
+    if re.fullmatch(r'[0-9]+', emoji_id):
+        extra['icon_custom_emoji_id'] = emoji_id
+    return KeyboardButton(label, api_kwargs=extra)
 
 
 async def send_brand_sticker(message, event):
@@ -64,6 +70,12 @@ async def with_keyboard_fallback(call, **kwargs):
 
 PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji')
 _PACK_ICONS = {}
+_PACK_EMOJIS = {}
+
+
+def premium_id(emoji):
+    """Return a real custom emoji ID from the owner's selected packs, if present."""
+    return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
 async def load_emoji_packs(application):
@@ -72,6 +84,8 @@ async def load_emoji_packs(application):
     cached = application.bot_data.setdefault('premium_pack_icons', {})
     _PACK_ICONS.clear()
     _PACK_ICONS.update(cached)
+    _PACK_EMOJIS.clear()
+    _PACK_EMOJIS.update(application.bot_data.setdefault('premium_pack_emojis', {}))
     packs = {}
     async def load(name):
         try:
@@ -89,6 +103,10 @@ async def load_emoji_packs(application):
         'DELETE': ('🗑', '❌', '✖'),
     }
     all_stickers = [s for name in PACK_NAMES for s in packs.get(name, [])]
+    for sticker in all_stickers:
+        for emoji in (sticker.emoji or '').split():
+            _PACK_EMOJIS[emoji.replace('\ufe0f', '')] = sticker.custom_emoji_id
+    application.bot_data['premium_pack_emojis'] = dict(_PACK_EMOJIS)
     for action, options in preferred.items():
         selected = next((s for emoji in options for s in all_stickers
                          if (s.emoji or '').replace('\ufe0f', '') == emoji), None)

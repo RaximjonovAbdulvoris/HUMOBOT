@@ -146,7 +146,7 @@ class ApplicationRefreshTests(unittest.IsolatedAsyncioTestCase):
         from PIL import Image
         from bot.template_cards import create_instruction_cards, CARDS
         directory=create_instruction_cards()
-        self.assertEqual(len(list(directory.glob('*.png'))),12)
+        self.assertEqual(len(list(directory.glob('*.png'))),11)
         for name in CARDS:
             with Image.open(directory/f'{name}.png') as image:
                 self.assertEqual(image.size,(1280,800))

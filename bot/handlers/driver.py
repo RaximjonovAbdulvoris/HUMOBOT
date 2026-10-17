@@ -24,7 +24,7 @@ from bot.config import template_path
 from bot.document_ocr import prepare_document_summary, SOURCES, enabled
 from bot.background_ocr import PENDING_TEXT, schedule_ocr
 from bot.application_ids import application_code
-from bot.presentation import send_brand_sticker, send_warning_voice, with_keyboard_fallback
+from bot.presentation import menu_button, send_brand_sticker, send_warning_voice, with_keyboard_fallback
 from bot.counter import next_index
 from bot.handlers.operator import build_operator_keyboard, register_application
 from bot.handlers.start import MENU_DRIVER, main_keyboard, require_region, cancel
@@ -64,7 +64,7 @@ JOIN_KEYBOARD = subscription_keyboard("driver:check_membership")
 
 CONTINUE_BTN = "✅ Davom etish"
 CONTINUE_KB = ReplyKeyboardMarkup(
-    [[CONTINUE_BTN]], resize_keyboard=True, one_time_keyboard=True
+    [[menu_button(CONTINUE_BTN, icon="READY")]], resize_keyboard=True, one_time_keyboard=True
 )
 
 
@@ -762,7 +762,7 @@ def build_driver_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[
             MessageHandler(
-                filters.ChatType.PRIVATE & filters.Regex(f"^{MENU_DRIVER}$"),
+                filters.ChatType.PRIVATE & filters.Regex(r"^(?:📝 )?Ulanish uchun Ariza$"),
                 start_driver,
             ),
         ],
@@ -784,7 +784,7 @@ def build_driver_conversation() -> ConversationHandler:
                 MessageHandler(~filters.COMMAND, phone_wrong),
             ],
             WARN_DOCS: [
-                MessageHandler(filters.Regex(f"^{CONTINUE_BTN}$"), warn_docs),
+                MessageHandler(filters.Regex(r"^(?:✅ )?Davom etish$"), warn_docs),
                 MessageHandler(~filters.COMMAND, warn_wrong),
             ],
             PASSPORT_FRONT: _photo_state(get_passport_front, _wrong_pf),

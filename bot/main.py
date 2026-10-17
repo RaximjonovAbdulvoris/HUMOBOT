@@ -9,6 +9,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 from bot.config import BOT_TOKEN
+from bot.premium_emoji import PremiumEmojiBot
 from bot.brand_cleanup import remove_legacy_brand_keyboards
 from bot.handlers.brand import build_brand_conversation
 from bot.handlers.driver import build_driver_conversation
@@ -27,7 +28,10 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE, MENU_REGION}
+MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE,
+                MENU_REGION, "📝 Ulanish uchun Ariza", "🎨 Brend Ariza",
+                "📞 Bog'lanish uchun", "📍 Ofis manzili",
+                "⚡ Spectre Energyga ariza", "🔄 Hududni almashtirish"}
 
 
 async def intercept_pending_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -56,7 +60,7 @@ def build_application_conversation() -> ConversationHandler:
     navigation = [
         CommandHandler("start", start, filters.ChatType.PRIVATE),
         CommandHandler("cancel", cancel, filters.ChatType.PRIVATE),
-        MessageHandler(filters.ChatType.PRIVATE & filters.Regex(f"^{MENU_REGION}$"), start),
+        MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r"^(?:🔄 )?Hududni almashtirish$"), start),
         build_contact_handler(),
         build_office_handler(),
     ]
@@ -164,10 +168,9 @@ def main() -> None:
 
     app = (
         Application.builder()
-        .token(BOT_TOKEN)
+        .bot(PremiumEmojiBot(BOT_TOKEN, request=request,
+                             get_updates_request=get_updates_request))
         .persistence(persistence)
-        .request(request)
-        .get_updates_request(get_updates_request)
         .post_init(post_init)
         .build()
     )
