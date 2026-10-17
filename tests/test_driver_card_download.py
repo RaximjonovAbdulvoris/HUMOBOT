@@ -32,7 +32,7 @@ class CardTests(unittest.TestCase):
     def test_numbered_licence_fields_separate_identity(self):
         def word(text, x, y):
             return Word(text, 99, x, y, 80 if x == 320 else 20, 28)
-        self.assertEqual(licence_identity([word('EXAMPLE', 320, 100),
+        self.assertEqual(licence_identity([word('1', 290, 100), word('EXAMPLE', 320, 100),
             word('2', 290, 130), word('PERSON', 320, 130)]), ('EXAMPLE', 'PERSON'))
 
 
