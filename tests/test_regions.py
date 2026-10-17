@@ -167,7 +167,8 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
         def buttons(region):
             return [button.text for row in start.main_keyboard(region).keyboard for button in row]
         for city in ("namangan", "tashkent"):
-            self.assertEqual(buttons(city), [
+            self.assertEqual([label.removeprefix(prefix) for label, prefix in zip(
+                buttons(city), ('🚕 ', '🎨 ', '⚡ ', '📞 ', '📍 ', '🔄 '))], [
                 start.MENU_DRIVER, start.MENU_BRAND, start.MENU_SPECTRE,
                 start.MENU_CONTACT, start.MENU_OFFICE, start.MENU_REGION,
             ])

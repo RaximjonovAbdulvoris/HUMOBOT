@@ -44,7 +44,7 @@ TASHKENT_OFFICE_KEYBOARD = InlineKeyboardMarkup([
 ])
 
 def main_keyboard(region: str) -> ReplyKeyboardMarkup:
-    rows = [[menu_button(MENU_DRIVER, "success", emoji="📝")],
+    rows = [[menu_button(MENU_DRIVER, "success", icon="DRIVER", emoji="🚕")],
             [menu_button(MENU_BRAND, emoji="🎨"), menu_button(MENU_SPECTRE, emoji="⚡")],
             [menu_button(MENU_CONTACT, emoji="📞"), menu_button(MENU_OFFICE, emoji="📍")],
             [menu_button(MENU_REGION, emoji="🔄")]]

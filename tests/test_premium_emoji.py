@@ -2,6 +2,7 @@
 import os
 import unittest
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace as N
 
 for key in ('TELEGRAM_BOT_TOKEN', 'DRIVER_GROUP_1', 'DRIVER_GROUP_2', 'BRAND_GROUP'):
     os.environ.setdefault(key, '123:test' if key == 'TELEGRAM_BOT_TOKEN' else '-1001')
@@ -39,14 +40,39 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('📝', result)
         self.assertIn('emoji-id="12345"', result)
 
-    def test_related_premium_symbol_keeps_menu_buttons_visible(self):
+    def test_unrelated_logo_never_replaces_location_or_document_text(self):
         presentation._PACK_ICONS.update({'DRIVER': '34567', 'CONTACT': '45678'})
-        self.assertIn('emoji-id="34567"', premium_html('📝 Ulanish', 'HTML'))
+        self.assertNotIn('tg-emoji', premium_html('📍 Toshkent · 📝 Ulanish', 'HTML'))
         self.assertEqual(premium_html('1️⃣ Old • 2️⃣ Orqa'), '1. Old • 2. Orqa')
         from bot.handlers.start import MENU_DRIVER, main_keyboard
         keyboard = main_keyboard('tashkent')
         self.assertEqual(keyboard.keyboard[0][0].text, MENU_DRIVER)
         self.assertEqual(keyboard.keyboard[0][0].api_kwargs['icon_custom_emoji_id'], '34567')
+
+    def test_missing_location_icon_remains_visible_in_keyboard(self):
+        from bot.handlers.start import main_keyboard
+        button = main_keyboard('tashkent').keyboard[2][1]
+        self.assertEqual(button.text, '📍 Ofis manzili')
+        self.assertNotIn('icon_custom_emoji_id', button.api_kwargs)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton('📍 Xaritada ochish', url='https://example.org')]])
+        self.assertIsNone(premium_keyboard(markup))
+
+    async def test_location_is_exact_and_driver_uses_only_logo_pack(self):
+        packs = {
+            'NewsEmoji': [N(emoji='🅱️', custom_emoji_id='111')],
+            'IslomjonAnimeEmoji': [N(emoji='📍', custom_emoji_id='222')],
+            'logowbtg': [N(emoji='🚕', custom_emoji_id='333')],
+        }
+        async def get_set(name):
+            return N(stickers=packs.get(name, []))
+        app = N(bot=N(get_sticker_set=get_set),
+                bot_data={'premium_pack_icons': {'LOCATION': '111'}})
+        await presentation.load_emoji_packs(app)
+        self.assertEqual(presentation.premium_id('📍'), '222')
+        self.assertEqual(presentation._PACK_ICONS['LOCATION'], '222')
+        self.assertEqual(presentation._PACK_ICONS['DRIVER'], '333')
+        self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
+        self.assertEqual(presentation.premium_id('📝'), None)
 
     def test_button_click_data_survives_premium_render(self):
         markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])

@@ -166,13 +166,13 @@ class EmojiPackTests(unittest.IsolatedAsyncioTestCase):
         assets=[N(emoji='✅',custom_emoji_id='123'),N(emoji='🗑',custom_emoji_id='456')]
         app=N(bot=N(get_sticker_set=AsyncMock(return_value=N(stickers=assets))),bot_data={})
         await presentation.load_emoji_packs(app)
-        self.assertEqual(app.bot.get_sticker_set.await_count,4)
+        self.assertEqual(app.bot.get_sticker_set.await_count,7)
         with patch.dict(os.environ,{'PREMIUM_ICON_READY':''}):
             self.assertEqual(presentation.button('Tayyor',action='x',icon='READY').api_kwargs['icon_custom_emoji_id'],'123')
         self.assertEqual(app.bot_data['premium_pack_icons']['DELETE'],'456')
 
-    async def test_unavailable_sets_preserve_cached_icons(self):
+    async def test_unavailable_sets_discard_unverified_cached_icons(self):
         app=N(bot=N(get_sticker_set=AsyncMock(side_effect=RuntimeError())),
               bot_data={'premium_pack_icons':{'READY':'123'}})
         await presentation.load_emoji_packs(app)
-        self.assertEqual(presentation._PACK_ICONS['READY'],'123')
+        self.assertNotIn('READY', presentation._PACK_ICONS)

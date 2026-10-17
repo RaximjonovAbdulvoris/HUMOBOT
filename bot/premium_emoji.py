@@ -118,7 +118,8 @@ def _button_icon(label):
                 'PROGRESS' if emoji in ('🟡', '🔴', '⏳', '🔄') else
                 'INCOMPLETE' if emoji in ('📄', '📷', '📝', '🪪') else
                 'OTHERPARK' if emoji in ('🚕', '🚗', '🚘') else
-                'DELETE' if emoji in ('🗑', '❌') else ''
+                'DELETE' if emoji in ('🗑', '❌') else
+                'LOCATION' if emoji in ('📍', '🗺') else ''
             )
     return None
 
@@ -143,9 +144,10 @@ def premium_keyboard(markup):
                 continue
             label = button['text']
             cleaned = _button_text(label)
-            if cleaned != label and cleaned:
+            icon = _button_icon(label)
+            if cleaned != label and cleaned and (
+                    (icon and icon.isdecimal()) or button.get('icon_custom_emoji_id')):
                 button['text'] = cleaned
-                icon = _button_icon(label)
                 if icon and icon.isdecimal() and not button.get('icon_custom_emoji_id'):
                     button['icon_custom_emoji_id'] = icon
                 changed = True

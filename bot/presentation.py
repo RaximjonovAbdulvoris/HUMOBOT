@@ -17,11 +17,12 @@ def button(label, *, action=None, url=None, style='primary', icon=None):
 
 def menu_button(label, style='primary', icon=None, emoji=None):
     extra = {'style': style}
-    emoji_id = (premium_id(emoji) if emoji else None) or (
-        os.environ.get(f'PREMIUM_ICON_{icon}', '') or _PACK_ICONS.get(icon, '')
-        if icon else '')
+    emoji_id = ((os.environ.get(f'PREMIUM_ICON_{icon}', '') or _PACK_ICONS.get(icon, ''))
+                if icon else '') or (premium_id(emoji) if emoji else '') or ''
     if re.fullmatch(r'[0-9]+', emoji_id):
         extra['icon_custom_emoji_id'] = emoji_id
+    elif emoji:
+        label = f'{emoji} {label}'
     return KeyboardButton(label, api_kwargs=extra)
 
 
@@ -68,35 +69,15 @@ async def with_keyboard_fallback(call, **kwargs):
         return await call(**kwargs)
 
 
-PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji')
+PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji',
+              'IslomjonAnimeEmoji', 'statuswb', 'logowbtg')
 _PACK_ICONS = {}
 _PACK_EMOJIS = {}
-_ICON_FALLBACKS = {
-    'DRIVER': '📝📄🪪📋📎📜',
-    'INCOMPLETE': '📷📸🤳✏',
-    'OTHERPARK': '🚖🚕🚗🚘',
-    'BRAND': '🎨',
-    'LOCATION': '📍🏢🗺',
-    'CONTACT': '📞☎✉💬📩✈📢',
-    'SPECTRE': '⚡🔋',
-    'READY': '✅☑✔',
-    'PROGRESS': '⏳🔄🕒🟡',
-    'DELETE': '⚠❗❌🔴🗑',
-}
 
 
 def premium_id(emoji):
-    """Prefer the matching glyph, then a semantically related Premium glyph."""
-    normalized = emoji.replace('\ufe0f', '')
-    exact = _PACK_EMOJIS.get(normalized)
-    if exact:
-        return exact
-    for action, symbols in _ICON_FALLBACKS.items():
-        if normalized in symbols:
-            return _PACK_ICONS.get(action)
-    # Communications and uncommon symbols use the application pack's visual
-    # style. The visible source text stays in place if the packs are unavailable.
-    return _PACK_ICONS.get('INCOMPLETE')
+    """A glyph may only be replaced with the same glyph, never a random logo."""
+    return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
 async def load_emoji_packs(application):
@@ -104,9 +85,7 @@ async def load_emoji_packs(application):
     import asyncio
     cached = application.bot_data.setdefault('premium_pack_icons', {})
     _PACK_ICONS.clear()
-    _PACK_ICONS.update(cached)
     _PACK_EMOJIS.clear()
-    _PACK_EMOJIS.update(application.bot_data.setdefault('premium_pack_emojis', {}))
     packs = {}
     async def load(name):
         try:
@@ -122,26 +101,43 @@ async def load_emoji_packs(application):
         'READY': ('✅', '☑', '✔'), 'PROGRESS': ('⏳', '🔄', '🕒'),
         'INCOMPLETE': ('📄', '📷', '⚠'), 'OTHERPARK': ('🚕', '🚗', '🔁'),
         'DELETE': ('🗑', '❌', '✖'),
-        'DRIVER': ('📝', '📄', '🪪'), 'BRAND': ('🎨', '🚗'),
+        'BRAND': ('🎨', '🚗'),
         'CONTACT': ('📞', '☎', '💬'), 'LOCATION': ('📍', '🗺', '🏢'),
         'SPECTRE': ('⚡', '🔋'),
     }
-    all_stickers = [s for name in PACK_NAMES for s in packs.get(name, [])]
-    for sticker in all_stickers:
+    # A sticker's own Unicode equivalent is the only safe match for message
+    # text. New packs take precedence over the old packs for identical glyphs.
+    for sticker in (s for name in reversed(PACK_NAMES) for s in packs.get(name, [])):
         for emoji in (sticker.emoji or '').split():
-            _PACK_EMOJIS[emoji.replace('\ufe0f', '')] = sticker.custom_emoji_id
+            _PACK_EMOJIS.setdefault(emoji.replace('\ufe0f', ''), sticker.custom_emoji_id)
     application.bot_data['premium_pack_emojis'] = dict(_PACK_EMOJIS)
+    # The user's WB logo pack is reserved for the Ulanish button. Every other
+    # action must have a genuinely matching glyph; no first-sticker fallback.
+    logo = packs.get('logowbtg', [])
+    driver = next((s for glyph in ('🚕', '🚗', '🚘', '🚖') for s in logo
+                   if (s.emoji or '').replace('\ufe0f', '') == glyph), None)
+    if driver is None and logo:
+        driver = logo[0]  # Only this pack is explicitly designated as a logo.
+    if driver:
+        _PACK_ICONS['DRIVER'] = driver.custom_emoji_id
+    by_pack = {
+        'READY': ('statuswb', 'ApplicationEmoji'),
+        'PROGRESS': ('statuswb', 'ApplicationEmoji', 'TONEmoji'),
+        'INCOMPLETE': ('IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),
+        'OTHERPARK': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
+        'DELETE': ('statuswb', 'ApplicationEmoji'),
+        'BRAND': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
+        'CONTACT': ('IslomjonAnimeEmoji', 'NewsEmoji'),
+        'LOCATION': ('IslomjonAnimeEmoji', 'NewsEmoji', 'ApplicationEmoji'),
+        'SPECTRE': ('FinanceEmoji', 'TONEmoji'),
+    }
     for action, options in preferred.items():
-        selected = next((s for emoji in options for s in all_stickers
+        selected = next((s for emoji in options for name in by_pack[action]
+                         for s in packs.get(name, [])
                          if (s.emoji or '').replace('\ufe0f', '') == emoji), None)
-        if selected is None and all_stickers:
-            fallback_pack = {'READY': 'ApplicationEmoji', 'PROGRESS': 'TONEmoji',
-                             'INCOMPLETE': 'NewsEmoji', 'OTHERPARK': 'FinanceEmoji',
-                             'DELETE': 'ApplicationEmoji', 'DRIVER': 'ApplicationEmoji',
-                             'BRAND': 'FinanceEmoji', 'CONTACT': 'NewsEmoji',
-                             'LOCATION': 'NewsEmoji', 'SPECTRE': 'TONEmoji'}[action]
-            candidates = packs.get(fallback_pack) or all_stickers
-            selected = candidates[0]
         if selected:
-            cached[action] = selected.custom_emoji_id
-    _PACK_ICONS.update(cached)
+            _PACK_ICONS[action] = selected.custom_emoji_id
+    # Drop old cached mappings such as LOCATION -> a WB logo. Retain a cached
+    # action only when its pack was unavailable, for transient Telegram errors.
+    cached.clear()
+    cached.update(_PACK_ICONS)
