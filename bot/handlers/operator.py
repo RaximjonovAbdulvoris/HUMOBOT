@@ -134,13 +134,12 @@ def _forget_application(context, key, record):
                     context.bot_data.get("pending_prompts", {}).pop(entry_key, None)
 
 
-async def _delete_operator_application(context, key, record, *, delete_downloads=False) -> bool:
+async def _delete_operator_application(context, key, record) -> bool:
     """Delete only recorded source messages; keep controls until photos are gone."""
     completed = record.setdefault("deleted_source_ids", [])
     ids = list(dict.fromkeys(record.get("photo_msg_ids", [])))
     ids = [mid for mid in ids if mid != record["kb_msg_id"]]
-    if delete_downloads:
-        ids.extend(mid for mid in record.get('zip_message_ids', []) if isinstance(mid, int))
+    ids.extend(mid for mid in record.get('zip_message_ids', []) if isinstance(mid, int))
     ids.append(record["kb_msg_id"])
     ids = list(dict.fromkeys(ids))
     for message_id in ids:
@@ -772,7 +771,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not await checkpoint(context):
             await query.message.reply_text("Arxiv nusxasi yaratildi, lekin holatni saqlab bo‘lmadi. Asl ariza o‘chirilmadi.")
             return
-        if not await _delete_operator_application(context, key, record, delete_downloads=True):
+        if not await _delete_operator_application(context, key, record):
             await query.message.reply_text(
                 "✅ Arxiv nusxasi tayyor. Ayrim asl xabarlarni o‘chirib bo‘lmadi. "
                 "Bot ruxsatlarini tekshirib «Tayyor»ni qayta bosing."
