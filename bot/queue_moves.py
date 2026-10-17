@@ -100,9 +100,13 @@ async def move_to_review(context, key, record, action):
     # Once separate region routes are enabled, a missing city destination
     # must not silently send a driver's documents to the shared queue.
     regional_queue = destination(f"{record.get('region', '').upper()}_{route_key}")
-    shared_queue = '' if os.environ.get('SEPARATE_REGION_GROUPS') == '1' else destination(route_key)
-    queue = (record.get('queue_destinations', {}).get(action)
-             or regional_queue or shared_queue)
+    saved_queue = record.get('queue_destinations', {}).get(action)
+    if os.environ.get('SEPARATE_REGION_GROUPS') == '1':
+        if saved_queue and str(saved_queue) != str(regional_queue):
+            return False, 'Eski ariza yo‘nalishi yangi hudud guruhiga mos emas. Administrator tekshirsin.'
+        queue = regional_queue
+    else:
+        queue = saved_queue or regional_queue or destination(route_key)
     if not re.fullmatch(r'-[1-9][0-9]*', str(queue)):
         return False, f'«{label}» guruhi sozlanmagan. {route_key} ga guruh ID sini kiriting.'
     if str(queue) == str(record['group_chat_id']):
