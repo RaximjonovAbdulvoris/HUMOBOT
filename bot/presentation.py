@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def button(label, *, action=None, url=None, style='primary', icon=None):
     extra = {'style': style}
-    emoji_id = os.environ.get(f'PREMIUM_ICON_{icon or ""}', '') or _PACK_ICONS.get(icon, '')
+    emoji_id = contact_emoji_id() if icon == 'CONTACT' else (os.environ.get(f'PREMIUM_ICON_{icon or ""}', '') or _PACK_ICONS.get(icon, ''))
     if re.fullmatch(r'[0-9]+', emoji_id):
         extra['icon_custom_emoji_id'] = emoji_id
     return InlineKeyboardButton(label, callback_data=action, url=url, api_kwargs=extra)
@@ -17,7 +17,8 @@ def button(label, *, action=None, url=None, style='primary', icon=None):
 
 def menu_button(label, style='primary', icon=None, emoji=None):
     extra = {'style': style}
-    emoji_id = ((os.environ.get(f'PREMIUM_ICON_{icon}', '') or _PACK_ICONS.get(icon, ''))
+    emoji_id = ((contact_emoji_id() if icon == 'CONTACT' else
+                 os.environ.get(f'PREMIUM_ICON_{icon}', '') or _PACK_ICONS.get(icon, ''))
                 if icon else '') or (premium_id(emoji) if emoji else '') or ''
     if re.fullmatch(r'[0-9]+', emoji_id):
         extra['icon_custom_emoji_id'] = emoji_id
@@ -27,7 +28,7 @@ def menu_button(label, style='primary', icon=None, emoji=None):
 
 
 def contact_button(label="Raqamni jo'natish"):
-    chosen = os.environ.get('PREMIUM_ICON_CONTACT', '') or _PACK_ICONS.get('CONTACT', '')
+    chosen = contact_emoji_id()
     extra = {'icon_custom_emoji_id': chosen} if re.fullmatch(r'[0-9]+', chosen) else {}
     return KeyboardButton(label if extra else f'📞 {label}',
                           request_contact=True, api_kwargs=extra)
@@ -81,6 +82,12 @@ PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji',
 _PACK_ICONS = {}
 _PACK_EMOJIS = {}
 _PACK_GLYPHS = {}
+CONTACT_EMOJI_ID = '5319164022245832659'  # Owner-selected phone artwork.
+
+
+def contact_emoji_id():
+    configured = os.environ.get('PREMIUM_ICON_CONTACT', '').strip()
+    return configured if re.fullmatch(r'[0-9]+', configured) else CONTACT_EMOJI_ID
 
 
 def premium_id(emoji):
@@ -92,13 +99,13 @@ def premium_id(emoji):
     # One supplied pack labels a coin as 📞. Select a real phone from the
     # phone action's sticker set instead of using that unrelated sticker.
     if emoji.replace('\ufe0f', '') == '📞':
-        return _PACK_ICONS.get('CONTACT')
+        return contact_emoji_id()
     return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
 def premium_markup(action, fallback):
     """Render one specifically chosen action icon in an HTML message."""
-    emoji_id = os.environ.get(f'PREMIUM_ICON_{action}', '') or _PACK_ICONS.get(action, '')
+    emoji_id = contact_emoji_id() if action == 'CONTACT' else (os.environ.get(f'PREMIUM_ICON_{action}', '') or _PACK_ICONS.get(action, ''))
     if emoji_id and re.fullmatch(r'[0-9]+', emoji_id):
         glyph = _PACK_GLYPHS.get(action, fallback)
         return f'<tg-emoji emoji-id="{emoji_id}">{glyph}</tg-emoji>'
@@ -171,6 +178,10 @@ async def load_emoji_packs(application):
         if selected:
             _PACK_ICONS[action] = selected.custom_emoji_id
             _PACK_GLYPHS[action] = selected.emoji or options[0]
+    # Contact uses the exact icon supplied by the owner, not an unrelated
+    # sticker carrying phone Unicode metadata in one of the public packs.
+    _PACK_ICONS['CONTACT'] = contact_emoji_id()
+    _PACK_GLYPHS['CONTACT'] = '📞'
     # Drop old cached mappings such as LOCATION -> a WB logo.
     cached.clear()
     cached.update(_PACK_ICONS)
