@@ -101,7 +101,7 @@ def clean_place(text):
     return value
 
 
-def licence_name(words):
+def licence_identity(words):
     # Numbered field 2 anchors the given name. Require one surname directly above,
     # aligned with it; do not pick the decorative region list at the card's right.
     anchors = [w for w in words if w.confidence >= 95 and re.fullmatch(r'2[.)]?', w.text)]
@@ -125,8 +125,14 @@ def licence_name(words):
         and .6 * given.height < given.top - w.top < 1.8 * given.height
         and abs(w.left - given.left) < given.height * .5]
     if name and len(surnames) == 1:
-        return clean_name(surname_text(surnames[0]) + ' ' + name)
+        surname = surname_text(surnames[0])
+        return (surname, name) if clean_name(surname + ' ' + name) else None
     return None
+
+
+def licence_name(words):
+    identity = licence_identity(words)
+    return ' '.join(identity) if identity else None
 
 
 def unanimous(readings):
@@ -216,7 +222,9 @@ def read_document(engine, raw, source, emit=None):
             max(p[0] for p in box) - left, max(p[1] for p in box) - top))
     values = fields_from_rows(words, source, image.width, image.height)
     if source == 'license_front':
-        values['full_name'] = licence_name(words)
+        identity = licence_identity(words)
+        values['surname'], values['given_name'] = identity or (None, None)
+        values['full_name'] = ' '.join(identity) if identity else None
         if emit:
             emit(guard_identifiers(values)[0])
         anchors = [w for w in words if w.confidence >= 75 and re.match(r'^3[.)]', w.text)]
@@ -243,7 +251,10 @@ def read_document(engine, raw, source, emit=None):
                 max(p[0] for p in box) - left, max(p[1] for p in box) - top))
         alternate = fields_from_rows(other, source, image.width, image.height)
         if source == 'license_front':
-            alternate['full_name'] = licence_name(other)
+            other_identity = licence_identity(other)
+            alternate['surname'], alternate['given_name'] = other_identity or (None, None)
+            alternate['full_name'] = ' '.join(other_identity) if other_identity else None
+        required = (*required, 'surname', 'given_name') if source == 'license_front' else required
         for key in required:
             if alternate.get(key):
                 if values.get(key) and values[key] != alternate[key]:
