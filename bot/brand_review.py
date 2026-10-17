@@ -83,20 +83,14 @@ async def sync_all(context):
 
 
 async def notify_applicant(context, review):
-    if review.get('applicant_notified') or not review.get('applicant_id'):
+    if (review['status'] != 'rejected' or review.get('applicant_notified')
+            or not review.get('applicant_id')):
         return
     kind = review.get('kind', 'brand')
     subject = 'Spectre Energy' if kind == 'spectre' else 'brendlash'
-    if review['status'] == 'rejected':
-        text = ('Arizangiz ko‘rib chiqildi. Afsuski, avtomobilingiz yoki yuborgan '
-                f'ma’lumotlaringiz {subject} talablariga mos kelmagani uchun arizangiz '
-                'tasdiqlanmadi.\n\nSavollar bo‘lsa, +998 78 113 80 81 raqamiga murojaat qiling.')
-    elif review['status'] in ('approved', 'exported'):
-        text = (f'Arizangiz ko‘rib chiqildi va {subject} uchun tasdiqlandi. '
-                'Tez orada siz bilan bog‘lanamiz.\n\nSavollar bo‘lsa, '
-                '+998 78 113 80 81 raqamiga murojaat qiling.')
-    else:
-        return
+    text = ('Arizangiz ko‘rib chiqildi. Afsuski, avtomobilingiz yoki yuborgan '
+            f'ma’lumotlaringiz {subject} talablariga mos kelmagani uchun arizangiz '
+            'tasdiqlanmadi.\n\nSavollar bo‘lsa, +998 78 113 80 81 raqamiga murojaat qiling.')
     try:
         await context.bot.send_message(chat_id=review['applicant_id'],
                                        text=f"Ariza {review['code']}\n\n{text}")
