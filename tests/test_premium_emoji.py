@@ -118,8 +118,10 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
 
     def test_owner_phone_icon_is_used_in_menu_and_contact_text(self):
-        from bot.handlers.start import main_keyboard, show_menu
-        menu = main_keyboard('tashkent').keyboard
+        from bot.handlers.start import main_keyboard
+        with patch.dict(os.environ, {'PREMIUM_ICON_CONTACT': '777'}):
+            menu = main_keyboard('tashkent').keyboard
+            self.assertEqual(presentation.premium_id('📞'), presentation.CONTACT_EMOJI_ID)
         self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
         markup = presentation.premium_markup('CONTACT', '📞')
         self.assertIn(f'emoji-id="{presentation.CONTACT_EMOJI_ID}"', markup)
