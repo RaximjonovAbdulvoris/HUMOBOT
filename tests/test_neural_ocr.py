@@ -130,9 +130,9 @@ class LicenceIdentityTests(unittest.TestCase):
             return ([[300, y], [650, y], [650, y + 30], [300, y + 30]], text, .99)
         first = ([detected('5.AB1234567', 300)], None)
         second = ([detected('5.AB1234568', 300), detected('4d12345678901234', 350)], None)
-        engine = unittest.mock.Mock(side_effect=[first, second])
+        engine = unittest.mock.Mock(side_effect=[first, first, second])
         values = read_document(engine, buffer.getvalue(), 'license_front')
-        self.assertEqual(engine.call_count, 2)
+        self.assertEqual(engine.call_count, 3)
         self.assertEqual(values['pinfl'], '12345678901234')
         self.assertIsNone(values['license_number'])
 
@@ -153,13 +153,25 @@ class LicenceIdentityTests(unittest.TestCase):
 
     def test_name_requires_field_two_and_aligned_surname(self):
         from bot.neural_ocr_worker import licence_name
-        words = [row('EXAMPLE', x=320, y=100, height=28),
+        words = [row('1', x=290, y=100, width=20, height=28),
+                 row('EXAMPLE', x=320, y=100, height=28),
                  row('2', x=290, y=130, width=20, height=28),
                  row('PERSON', x=320, y=130, height=28),
                  row('OTHER REGION', x=780, y=100)]
         self.assertEqual(licence_name(words), 'EXAMPLE PERSON')
         self.assertIsNone(licence_name([w for w in words if w.text != '2']))
         self.assertIsNone(licence_name(words + [row('CONFLICT', x=322, y=101, height=28)]))
+
+    def test_licence_name_includes_second_line_of_field_two(self):
+        from bot.neural_ocr_worker import licence_identity
+        words = [row('1', x=290, y=100, width=20, height=28, confidence=92),
+                 row('EXAMPLE', x=320, y=100, height=28),
+                 row('2', x=290, y=135, width=20, height=28),
+                 row('PERSON', x=320, y=135, height=28),
+                 row("SECONDO'G'LI", x=321, y=172, height=28, confidence=89),
+                 row('3.TEST CITY 01.02.1990', x=290, y=207, height=28)]
+        self.assertEqual(licence_identity(words), ('EXAMPLE', "PERSON SECOND O'G'LI"))
+        self.assertIsNone(licence_identity(words + [row('CONFLICT', x=321, y=176, height=28)]))
 
     def test_repeated_ocr_disagreement_stays_unknown(self):
         from bot.neural_ocr_worker import unanimous
