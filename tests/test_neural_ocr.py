@@ -99,15 +99,26 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(process.returncode, -9)
         self.assertNotIn('TELEGRAM_BOT_TOKEN', spawn.call_args.kwargs['env'])
 
-    async def test_worker_budget_allows_twenty_seconds(self):
+    async def test_worker_budget_allows_registration_crosscheck(self):
         process = N(returncode=0, stdin=N(write=lambda _: None, drain=AsyncMock(), close=lambda: None),
             stdout=N(readline=AsyncMock(return_value=b'')), wait=AsyncMock(), kill=lambda: None)
         with patch.object(asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), \
              patch.object(asyncio, 'wait_for', side_effect=lambda awaitable, timeout: asyncio.ensure_future(awaitable)) as wait:
             await neural._worker([])
-        self.assertEqual(wait.call_args.kwargs['timeout'], 20)
+        self.assertEqual(wait.call_args.kwargs['timeout'], 40)
 
 class LicenceIdentityTests(unittest.TestCase):
+    def test_registration_disagreement_on_hologram_is_not_exported(self):
+        from bot.neural_ocr_worker import refine_registration
+        from PIL import Image
+        from unittest.mock import Mock
+        box = [[10, 10], [180, 10], [180, 45], [10, 45]]
+        engine = Mock(side_effect=[([(box, 'AB1234567', .99)], None)] * 3 +
+                                  [([(box, 'AB1234568', .99)], None)])
+        self.assertIsNone(refine_registration(engine, Image.new('RGB', (960, 1280))))
+        engine = Mock(return_value=([(box, 'AB1234567', .99)], None))
+        self.assertEqual(refine_registration(engine, Image.new('RGB', (960, 1280))), 'AB1234567')
+
     def test_enhanced_pass_fills_missing_field_without_overriding_conflict(self):
         from bot.neural_ocr_worker import read_document
         from PIL import Image
