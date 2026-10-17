@@ -74,6 +74,11 @@ def _comment_only_keyboard(applicant_user_id: int):
     return None
 
 
+def is_review_record(record: dict) -> bool:
+    """Recognize both current and migrated NAMANTOSH review queue records."""
+    return record.get('queue_kind') in ('incomplete', 'otherpark') or record.get('queue_stage') in ('incomplete', 'other')
+
+
 async def refresh_driver_keyboards(application) -> None:
     """Upgrade stored driver controls on deployment; never touch plain forms."""
     seen = set()
@@ -94,7 +99,7 @@ async def refresh_driver_keyboards(application) -> None:
                     chat_id=chat_id, message_id=message_id,
                     reply_markup=build_operator_keyboard(
                         user_id, application.bot_data.get("progress_state", {}).get(key, False),
-                        review=bool(record.get("queue_kind"))
+                        review=is_review_record(record)
                     ),
                 )
             except BadRequest as error:
@@ -682,7 +687,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action in ("incomplete", "otherpark"):
         key, record = resolved
-        if record.get('queue_kind'):
+        if is_review_record(record):
             await query.message.reply_text("Bu guruhda Tayyor, O‘chirish va Jarayonda amallari mavjud.")
             return
         from bot.queue_moves import move_to_review
@@ -779,7 +784,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         new_state = not progress_state.get(key, False)
         try:
             await with_keyboard_fallback(query.edit_message_reply_markup,
-                reply_markup=build_operator_keyboard(applicant_id, in_progress=new_state, review=bool(record.get("queue_kind")))
+                reply_markup=build_operator_keyboard(applicant_id, in_progress=new_state, review=is_review_record(record))
             )
         except Exception:
             logger.warning("progress: could not update keyboard for %s", key)
@@ -796,7 +801,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         if resolved:
             key, record = resolved
             markup = (build_operator_keyboard(
-                applicant_id, context.bot_data.get("progress_state", {}).get(key, False), review=bool(record.get("queue_kind"))
+                applicant_id, context.bot_data.get("progress_state", {}).get(key, False), review=is_review_record(record)
             ) if query.message.message_id == record["kb_msg_id"] else None)
             await query.edit_message_reply_markup(reply_markup=markup)
         return
