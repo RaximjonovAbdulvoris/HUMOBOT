@@ -63,10 +63,13 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_location_is_exact_and_driver_uses_only_logo_pack(self):
         packs = {
-            'NewsEmoji': [N(emoji='🅱️', custom_emoji_id='111')],
-            'IslomjonAnimeEmoji': [N(emoji='📍', custom_emoji_id='222')],
+            'NewsEmoji': [N(emoji='🅱️', custom_emoji_id='111'),
+                          N(emoji='📞', custom_emoji_id='666')],
+            'IslomjonAnimeEmoji': [N(emoji='📍', custom_emoji_id='222'),
+                                   N(emoji='📱', custom_emoji_id='777')],
             'logowbtg': [N(emoji='🚕', custom_emoji_id='333')],
             'FinanceEmoji': [N(emoji='🚗', custom_emoji_id='444'),
+                             N(emoji='🔋', custom_emoji_id='888'),
                              N(emoji='⚡', custom_emoji_id='555')],
         }
         async def get_set(name):
@@ -79,13 +82,47 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(presentation._PACK_ICONS['DRIVER'], '333')
         self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
         self.assertEqual(presentation.premium_id('📝'), None)
+        self.assertIsNone(presentation.premium_id('📞'))
+        self.assertEqual(presentation._PACK_ICONS['CONTACT'], '777')
+        self.assertEqual(presentation._PACK_ICONS['SPECTRE'], '555')
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][0].api_kwargs['icon_custom_emoji_id'], '444')
         self.assertEqual(menu[1][1].api_kwargs['icon_custom_emoji_id'], '555')
+        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], '777')
         self.assertIn('emoji-id="333"', presentation.premium_markup('DRIVER', '🚕'))
         self.assertIn('emoji-id="444"', presentation.premium_markup('BRAND', '🎨'))
         self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
+
+    async def test_coin_and_battery_cannot_replace_phone_and_energy(self):
+        async def get_set(name):
+            return N(stickers=[N(emoji='📞', custom_emoji_id='666'),
+                               N(emoji='🔋', custom_emoji_id='888')]
+                     if name == 'FinanceEmoji' else [])
+        await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
+        self.assertNotIn('CONTACT', presentation._PACK_ICONS)
+        self.assertNotIn('SPECTRE', presentation._PACK_ICONS)
+        from bot.handlers.start import main_keyboard
+        menu = main_keyboard('tashkent').keyboard
+        self.assertEqual(menu[1][1].text, '⚡ Spectre Energyga ariza')
+        self.assertEqual(menu[2][0].text, "📱 Bog'lanish uchun")
+
+    async def test_operator_icons_follow_the_actual_status(self):
+        assets = [N(emoji=glyph, custom_emoji_id=icon) for glyph, icon in
+                  [('🟡', '111'), ('🔴', '222'), ('📷', '333'),
+                   ('🚕', '444'), ('🗑', '555')]]
+        async def get_set(name):
+            return N(stickers=assets if name == 'statuswb' else [])
+        await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
+        from bot.handlers.operator import build_operator_keyboard
+        inactive = build_operator_keyboard(42)
+        active = build_operator_keyboard(42, in_progress=True)
+        self.assertEqual(inactive.inline_keyboard[0][1].api_kwargs['icon_custom_emoji_id'], '222')
+        self.assertEqual(active.inline_keyboard[0][1].api_kwargs['icon_custom_emoji_id'], '111')
+        self.assertEqual(inactive.inline_keyboard[1][0].api_kwargs['icon_custom_emoji_id'], '333')
+        self.assertEqual(inactive.inline_keyboard[1][1].api_kwargs['icon_custom_emoji_id'], '444')
+        self.assertEqual(inactive.inline_keyboard[2][0].api_kwargs['icon_custom_emoji_id'], '555')
+        self.assertIn('✅', inactive.inline_keyboard[0][0].text)
 
     def test_button_click_data_survives_premium_render(self):
         markup = InlineKeyboardMarkup([[InlineKeyboardButton('📄 Hujjatlar', callback_data='op:ready:5')]])

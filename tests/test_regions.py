@@ -168,7 +168,7 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
             return [button.text for row in start.main_keyboard(region).keyboard for button in row]
         for city in ("namangan", "tashkent"):
             self.assertEqual([label.removeprefix(prefix) for label, prefix in zip(
-                buttons(city), ('🚕 ', '🎨 ', '⚡ ', '📞 ', '📍 ', '🔄 '))], [
+                buttons(city), ('🚕 ', '🎨 ', '⚡ ', '📱 ', '📍 ', '🔄 '))], [
                 start.MENU_DRIVER, start.MENU_BRAND, start.MENU_SPECTRE,
                 start.MENU_CONTACT, start.MENU_OFFICE, start.MENU_REGION,
             ])
@@ -206,7 +206,7 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
             text = msg.message.reply_text.call_args.args[0]
             self.assertEqual(text,
                 f"<b>{regions.region_name(city)} — bog‘lanish</b>\n\n"
-                "📞 Aloqa: +998 78 113-80-81\n"
+                "📱 Aloqa: +998 78 113-80-81\n"
                 f"✈️ Telegram: {telegram}\n"
                 "📢 Telegram kanal: https://t.me/+knRCQZnC9UphNjky\n"
                 '📸 Instagram: <a href="https://www.instagram.com/humo_wb_taxi/">@humo_wb_taxi</a>')

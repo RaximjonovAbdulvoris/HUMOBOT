@@ -47,7 +47,7 @@ def main_keyboard(region: str) -> ReplyKeyboardMarkup:
     rows = [[menu_button(MENU_DRIVER, "success", icon="DRIVER", emoji="🚕")],
             [menu_button(MENU_BRAND, icon="BRAND", emoji="🎨"),
              menu_button(MENU_SPECTRE, icon="SPECTRE", emoji="⚡")],
-            [menu_button(MENU_CONTACT, icon="CONTACT", emoji="📞"),
+            [menu_button(MENU_CONTACT, icon="CONTACT", emoji="📱"),
              menu_button(MENU_OFFICE, icon="LOCATION", emoji="📍")],
             [menu_button(MENU_REGION, icon="REGION", emoji="🔄")]]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
@@ -57,7 +57,7 @@ def main_keyboard(region: str) -> ReplyKeyboardMarkup:
 MAIN_KEYBOARD = main_keyboard(NAMANGAN)
 
 CONTACT_TEXT = (
-    "📞 Aloqa: +998 78 113-80-81\n"
+    "📱 Aloqa: +998 78 113-80-81\n"
     "✈️ Telegram: @humo_Namangan\n"
     "📢 Telegram kanal: https://t.me/+knRCQZnC9UphNjky\n"
     '📸 Instagram: <a href="https://www.instagram.com/humo_wb_taxi/">@humo_wb_taxi</a>'
@@ -104,7 +104,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"{premium_markup('DRIVER', '🚕')} <b>Ulanish uchun ariza</b> — haydovchi sifatida ro‘yxatdan o‘tish.\n"
         f"{premium_markup('BRAND', '🎨')} <b>Brend ariza</b> — avtomobilni brendlash uchun murojaat.\n"
         f"{premium_markup('SPECTRE', '⚡')} <b>Spectre Energyga ariza</b> — avtomobil ma’lumotlarini yuborish.\n"
-        "📞 Aloqa ma’lumotlari va 📍 ofis manzili ham quyidagi menyuda."
+        f"{premium_markup('CONTACT', '📱')} Aloqa ma’lumotlari va 📍 ofis manzili ham quyidagi menyuda."
     )
     await update.effective_message.reply_text(
         f"📍 <b>{region_name(region)}</b>\n\n"
@@ -242,7 +242,7 @@ async def show_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 def build_contact_handler() -> MessageHandler:
-    return MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r"^(?:📞 )?Bog'lanish uchun$"), show_contact)
+    return MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r"^(?:(?:📞|📱) )?Bog'lanish uchun$"), show_contact)
 
 
 async def show_office(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

@@ -82,6 +82,9 @@ def premium_id(emoji):
     # the native, predictably green Telegram checkmark.
     if emoji.replace('\ufe0f', '') == '✅':
         return None
+    # One supplied pack labels a coin as 📞. Use a recognizable phone instead.
+    if emoji.replace('\ufe0f', '') == '📞':
+        return None
     return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
@@ -113,12 +116,12 @@ async def load_emoji_packs(application):
     except asyncio.TimeoutError:
         logger.warning('Emoji-set lookup timed out; available/cache icons retained.')
     preferred = {
-        'PROGRESS': ('⏳', '🔄', '🕒'),
-        'INCOMPLETE': ('📄', '📷', '⚠'), 'OTHERPARK': ('🚕', '🚗', '🔁'),
-        'DELETE': ('🗑', '❌', '✖'),
+        'PROGRESS_ACTIVE': ('🟡',), 'PROGRESS_IDLE': ('🔴',),
+        'INCOMPLETE': ('📷',), 'OTHERPARK': ('🚕', '🚗'),
+        'DELETE': ('🗑',),
         'BRAND': ('🎨', '🚗'),
-        'CONTACT': ('📞', '☎', '💬'), 'LOCATION': ('📍', '🗺', '🏢'),
-        'SPECTRE': ('⚡', '🔋'), 'REGION': ('🔄', '🔁', '🗺'),
+        'CONTACT': ('📱', '☎'), 'LOCATION': ('📍', '🗺', '🏢'),
+        'SPECTRE': ('⚡',), 'REGION': ('🔄', '🔁', '🗺'),
     }
     # A sticker's own Unicode equivalent is the only safe match for message
     # text. New packs take precedence over the old packs for identical glyphs.
@@ -138,9 +141,10 @@ async def load_emoji_packs(application):
         _PACK_GLYPHS['DRIVER'] = '🚕'
     by_pack = {
         'READY': ('statuswb', 'ApplicationEmoji'),
-        'PROGRESS': ('statuswb', 'ApplicationEmoji', 'TONEmoji'),
-        'INCOMPLETE': ('IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),
-        'OTHERPARK': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
+        'PROGRESS_ACTIVE': ('statuswb', 'ApplicationEmoji'),
+        'PROGRESS_IDLE': ('statuswb', 'ApplicationEmoji'),
+        'INCOMPLETE': ('statuswb', 'IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),
+        'OTHERPARK': ('statuswb', 'FinanceEmoji', 'IslomjonAnimeEmoji'),
         'DELETE': ('statuswb', 'ApplicationEmoji'),
         'BRAND': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
         'CONTACT': ('IslomjonAnimeEmoji', 'NewsEmoji'),

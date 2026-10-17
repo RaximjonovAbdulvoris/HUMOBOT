@@ -55,8 +55,9 @@ def build_operator_keyboard(
 ) -> InlineKeyboardMarkup:
     def button(label, action):
         style = {"ready": "success", "delete": "danger"}.get(action, "primary")
+        icon = ('PROGRESS_ACTIVE' if in_progress else 'PROGRESS_IDLE') if action == 'progress' else action.upper()
         return styled_button(label, action=f"op:{action}:{applicant_user_id}",
-                             style=style, icon=action.upper())
+                             style=style, icon=icon)
     rows = [[button("✅ Tayyor", "ready"),
              button("Jarayonda (faol) 🟡" if in_progress else "Jarayonda (bo‘sh) 🔴", "progress")]]
     if not review:

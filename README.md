@@ -180,6 +180,10 @@ buttons remain accepted after the labels change.
 Confirmation checkmarks (`✅`) deliberately stay as Telegram's native green
 emoji: a visually blue custom check in one of the selected packs must not
 replace a green success mark in photo progress or acceptance messages.
+The supplied pack's `📞` entry appears as a coin, so contact prompts use
+`📱` and only a matching phone asset. Spectre only accepts an `⚡` asset;
+a battery `🔋` cannot stand in for energy. Operator progress icons match
+their actual yellow/red state; missing matches keep the original emoji.
 
 Server update for the existing test service:
 
