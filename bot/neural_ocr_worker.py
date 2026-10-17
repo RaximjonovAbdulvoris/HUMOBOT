@@ -20,10 +20,15 @@ def fields_from_rows(rows, source, width, height):
         text = word.text.strip()
         if word.confidence < 90:
             continue
-        if source.startswith(('passport_', 'license_')):
+        if source.startswith('passport_'):
             for match in re.finditer(r'(?<![0-9])([0-9]{14})(?![0-9])', text):
                 add('pinfl', match[1])
         if source == 'license_front':
+            # A licence may contain other 14-digit identifiers. Only field 4d
+            # is the applicant's PINFL; an unlabelled number is not enough.
+            pinfl = re.fullmatch(r'4\s*[dд][.)]?\s*([0-9]{14})', text, re.I)
+            if pinfl:
+                add('pinfl', pinfl[1])
             serial = re.fullmatch(r'5[.)]?\s*' + SERIAL, text)
             if serial:
                 add('license_number', serial[1])
@@ -39,6 +44,16 @@ def fields_from_rows(rows, source, width, height):
             if serial:
                 add('vehicle_registration', serial[1])
     if source == 'license_front':
+        # Some OCR layouts split the printed 4d label and number into two boxes.
+        anchors = [w for w in rows if w.confidence >= 90 and
+                   re.fullmatch(r'4\s*[dд][.)]?', w.text, re.I)]
+        for anchor in anchors:
+            for word in rows:
+                if (word.confidence >= 90 and re.fullmatch(r'[0-9]{14}', word.text)
+                        and 0 <= word.left - anchor.left - anchor.width < anchor.height * 5
+                        and abs(word.top + word.height / 2 - anchor.top - anchor.height / 2)
+                        <= max(anchor.height, word.height) * .5):
+                    add('pinfl', word.text)
         # On the numbered licence, 4b (expiry) is directly right of 4a.
         # Require the 4a anchor and one intact date on the same text baseline.
         anchors = [w for w in rows if w.confidence >= 90 and re.fullmatch(r'4a[.)]?\s*' + DATE, w.text, re.I)]

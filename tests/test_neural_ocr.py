@@ -40,6 +40,14 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
                      [row('5.AB1234567', confidence=70)], [row('5.AB12345O7')]]:
             self.assertIsNone(fields_from_rows(rows, 'license_front', 960, 1280)['license_number'])
 
+    def test_licence_pinfl_requires_printed_4d_field(self):
+        candidate = '12345678901234'
+        self.assertIsNone(fields_from_rows([row(candidate)], 'license_front', 960, 1280)['pinfl'])
+        self.assertEqual(fields_from_rows([row('4d', x=260),
+            row(candidate, x=465)], 'license_front', 960, 1280)['pinfl'], candidate)
+        self.assertIsNone(fields_from_rows([row('4d', x=260, y=200),
+            row(candidate, x=465, y=300)], 'license_front', 960, 1280)['pinfl'])
+
     async def test_dispatch_never_contacts_external_or_ollama(self):
         with patch.dict(os.environ, {'DOCUMENT_AI_ENABLED': '1', 'DOCUMENT_OCR_BACKEND': 'rapid'}), \
              patch.object(neural, 'extract_documents', AsyncMock(return_value={'backend': 'rapid'})), \
