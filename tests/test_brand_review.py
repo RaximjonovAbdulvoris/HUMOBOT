@@ -10,7 +10,7 @@ from bot import brand_review, brand_sheets
 
 
 class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
-    def setup_review(self, member='administrator'):
+    def setup_review(self, member='administrator', kind='brand'):
         bot = N(get_chat_member=AsyncMock(return_value=N(status=member)),
                 edit_message_text=AsyncMock(), send_message=AsyncMock(),
                 delete_message=AsyncMock())
@@ -18,7 +18,7 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
         review = brand_review.stage_review(context, {
             'b_name': 'Test', 'b_phone': '+998781138081', 'b_model': 'Cobalt',
             'b_year': '2020', 'b_color': 'Oq', 'b_plate': '01A123BC',
-        }, 'HM-000001', 'tashkent', -1001, '<b>Ariza</b>', 2001)
+        }, 'HM-000001', 'tashkent', -1001, '<b>Ariza</b>', 2001, kind=kind)
         review['message_id'] = 10
         query = N(data='brand-review:approve:HM-000001',
                   message=N(message_id=10, sender_chat=None), answer=AsyncMock())
@@ -52,6 +52,28 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(context.bot_data.get('brand_sheets_outbox'))
         context.bot.delete_message.assert_awaited_once_with(chat_id=-1001, message_id=10)
         self.assertIn('tasdiqlanmadi', context.bot.send_message.await_args.kwargs['text'])
+
+    async def test_spectre_approval_exports_only_after_operator_decision(self):
+        context, review, update = self.setup_review(kind='spectre')
+        with patch.object(brand_sheets, 'configuration', return_value=('url', 'secret')), \
+             patch.object(brand_sheets, 'post_export', AsyncMock()) as send:
+            await brand_sheets.flush(context)
+            send.assert_not_awaited()
+            await brand_review.on_review(update, context)
+            self.assertEqual(context.bot_data['brand_sheets_outbox']['HM-000001']['payload']['kind'], 'spectre')
+            self.assertIn('Spectre Energy', context.bot.send_message.await_args.kwargs['text'])
+            await brand_sheets.flush(context)
+        self.assertEqual(review['status'], 'exported')
+        self.assertIn('Google Sheetsga to‘ldirildi', context.bot.edit_message_text.await_args.kwargs['text'])
+
+    async def test_spectre_rejection_removes_post_and_blocks_export(self):
+        context, review, update = self.setup_review(kind='spectre')
+        update.callback_query.data = 'brand-review:reject:HM-000001'
+        await brand_review.on_review(update, context)
+        self.assertEqual(review['status'], 'rejected')
+        self.assertFalse(context.bot_data.get('brand_sheets_outbox'))
+        context.bot.delete_message.assert_awaited_once()
+        self.assertIn('Spectre Energy', context.bot.send_message.await_args.kwargs['text'])
 
     async def test_sheet_success_updates_original_post(self):
         context, review, update = self.setup_review()
