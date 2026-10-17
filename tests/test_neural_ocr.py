@@ -35,6 +35,11 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
             'tech_back', 960, 1280)
         self.assertEqual(values['vehicle_registration'], 'ABC1234567')
 
+    def test_registration_hologram_at_sixty_two_percent_width(self):
+        values = fields_from_rows([row('ABC1234567', x=600, y=430)],
+                                  'tech_back', 960, 1280)
+        self.assertEqual(values['vehicle_registration'], 'ABC1234567')
+
     def test_conflicts_low_confidence_and_uncertain_digits_remain_blank(self):
         for rows in [[row('5.AB1234567'), row('5.AB1234568')],
                      [row('5.AB1234567', confidence=70)], [row('5.AB12345O7')]]:

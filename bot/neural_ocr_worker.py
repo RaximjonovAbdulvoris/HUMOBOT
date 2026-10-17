@@ -39,7 +39,7 @@ def fields_from_rows(rows, source, width, height):
             expiry = re.search(r'4\s*[bвб][.)]?\s*' + DATE, text, re.I)
             if expiry:
                 add('license_expiry', '.'.join(expiry.groups()))
-        if source.startswith('tech_') and word.left >= .65 * width and word.top < .75 * height:
+        if source.startswith('tech_') and word.left >= .60 * width and word.top < .75 * height:
             serial = re.fullmatch(SERIAL, text.upper())
             if serial:
                 add('vehicle_registration', serial[1])
@@ -207,8 +207,10 @@ def read_document(engine, raw, source, emit=None):
         if len(anchors) == 1:
             refined = refine_birth(engine, image, anchors[0])
             for key, value in refined.items():
-                if value:
-                    values[key] = value if not values[key] or values[key] == value else None
+                # A narrow crop can read only part of a place name. The intact,
+                # numbered field 3 has precedence when it already parsed cleanly.
+                if value and not values[key]:
+                    values[key] = value
     return guard_identifiers(values)[0]
 
 
