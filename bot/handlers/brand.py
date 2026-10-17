@@ -299,11 +299,10 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         from bot.queue_moves import checkpoint
         review = None
-        if kind == 'brand':
-            from bot.brand_review import stage_review, review_keyboard, status_text
-            review = stage_review(context, data, code, region, group_id, text, user.id)
-            if not await checkpoint(context):
-                raise RuntimeError('Brand review state could not be saved')
+        from bot.brand_review import stage_review, review_keyboard, status_text
+        review = stage_review(context, data, code, region, group_id, text, user.id, kind=kind)
+        if not await checkpoint(context):
+            raise RuntimeError('Review state could not be saved')
         if not data.get('_brand_group_message'):
             message = await context.bot.send_message(
                 chat_id=group_id,
@@ -311,16 +310,10 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode=ParseMode.HTML,
                 reply_markup=review_keyboard(code) if review else None)
             data['_brand_group_message'] = message.message_id
-        if review:
-            review['message_id'] = data['_brand_group_message']
-            review['displayed_status'] = 'pending'
-            if not await checkpoint(context):
-                raise RuntimeError('Brand review message could not be saved')
-        else:
-            from bot.brand_sheets import enqueue
-            enqueue(context, data, user, code, region, kind=kind)
-            if not await checkpoint(context):
-                raise RuntimeError('Spectre export state could not be saved')
+        review['message_id'] = data['_brand_group_message']
+        review['displayed_status'] = 'pending'
+        if not await checkpoint(context):
+            raise RuntimeError('Review message could not be saved')
     except Exception as error:
         logger.warning("Brand submission failed (%s)", type(error).__name__)
         if isinstance(error, NetworkError) and not isinstance(error, BadRequest):
