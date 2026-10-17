@@ -73,6 +73,7 @@ PACK_NAMES = ('ApplicationEmoji', 'FinanceEmoji', 'TONEmoji', 'NewsEmoji',
               'IslomjonAnimeEmoji', 'statuswb', 'logowbtg')
 _PACK_ICONS = {}
 _PACK_EMOJIS = {}
+_PACK_GLYPHS = {}
 
 
 def premium_id(emoji):
@@ -80,12 +81,22 @@ def premium_id(emoji):
     return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
+def premium_markup(action, fallback):
+    """Render one specifically chosen action icon in an HTML message."""
+    emoji_id = os.environ.get(f'PREMIUM_ICON_{action}', '') or _PACK_ICONS.get(action, '')
+    if emoji_id and re.fullmatch(r'[0-9]+', emoji_id):
+        glyph = _PACK_GLYPHS.get(action, fallback)
+        return f'<tg-emoji emoji-id="{emoji_id}">{glyph}</tg-emoji>'
+    return fallback
+
+
 async def load_emoji_packs(application):
-    """Resolve actual Telegram IDs from the four user-selected custom emoji sets."""
+    """Resolve actual Telegram IDs from the user's custom emoji sets."""
     import asyncio
     cached = application.bot_data.setdefault('premium_pack_icons', {})
     _PACK_ICONS.clear()
     _PACK_EMOJIS.clear()
+    _PACK_GLYPHS.clear()
     packs = {}
     async def load(name):
         try:
@@ -103,7 +114,7 @@ async def load_emoji_packs(application):
         'DELETE': ('🗑', '❌', '✖'),
         'BRAND': ('🎨', '🚗'),
         'CONTACT': ('📞', '☎', '💬'), 'LOCATION': ('📍', '🗺', '🏢'),
-        'SPECTRE': ('⚡', '🔋'),
+        'SPECTRE': ('⚡', '🔋'), 'REGION': ('🔄', '🔁', '🗺'),
     }
     # A sticker's own Unicode equivalent is the only safe match for message
     # text. New packs take precedence over the old packs for identical glyphs.
@@ -120,6 +131,7 @@ async def load_emoji_packs(application):
         driver = logo[0]  # Only this pack is explicitly designated as a logo.
     if driver:
         _PACK_ICONS['DRIVER'] = driver.custom_emoji_id
+        _PACK_GLYPHS['DRIVER'] = '🚕'
     by_pack = {
         'READY': ('statuswb', 'ApplicationEmoji'),
         'PROGRESS': ('statuswb', 'ApplicationEmoji', 'TONEmoji'),
@@ -130,6 +142,7 @@ async def load_emoji_packs(application):
         'CONTACT': ('IslomjonAnimeEmoji', 'NewsEmoji'),
         'LOCATION': ('IslomjonAnimeEmoji', 'NewsEmoji', 'ApplicationEmoji'),
         'SPECTRE': ('FinanceEmoji', 'TONEmoji'),
+        'REGION': ('IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),
     }
     for action, options in preferred.items():
         selected = next((s for emoji in options for name in by_pack[action]
@@ -137,7 +150,7 @@ async def load_emoji_packs(application):
                          if (s.emoji or '').replace('\ufe0f', '') == emoji), None)
         if selected:
             _PACK_ICONS[action] = selected.custom_emoji_id
-    # Drop old cached mappings such as LOCATION -> a WB logo. Retain a cached
-    # action only when its pack was unavailable, for transient Telegram errors.
+            _PACK_GLYPHS[action] = selected.emoji or options[0]
+    # Drop old cached mappings such as LOCATION -> a WB logo.
     cached.clear()
     cached.update(_PACK_ICONS)

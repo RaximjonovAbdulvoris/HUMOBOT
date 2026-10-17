@@ -166,6 +166,9 @@ These links identify custom emoji sets, not standalone sticker packs.
 
 Outgoing text, photo captions and keyboard labels use matching Premium emoji
 from these sets. Existing Markdown/HTML emphasis and button actions are kept.
+The menu description uses the same explicit action icons as its buttons:
+`logowbtg` for Ulanish and the matching car/paint and energy symbols for
+Brend and Spectre. A generated icon is never nested inside another custom emoji.
 If a symbol has no exact match in the selected sets, the original symbol
 remains so the message does not lose its meaning. On clients without
 custom emoji support or

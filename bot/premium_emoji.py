@@ -80,15 +80,20 @@ def premium_html(text, parse_mode=None):
     changed = False
     output = []
     in_code = False
+    in_custom_emoji = False
     for chunk in _TAGS.split(source):
         if chunk.startswith('<') and chunk.endswith('>'):
             if chunk.lower().startswith(('<code', '<pre')):
                 in_code = True
             if chunk.lower().startswith(('</code', '</pre')):
                 in_code = False
+            if chunk.lower().startswith('<tg-emoji '):
+                in_custom_emoji = True
+            if chunk.lower().startswith('</tg-emoji'):
+                in_custom_emoji = False
             output.append(chunk)
             continue
-        if in_code:
+        if in_code or in_custom_emoji:
             output.append(chunk)
             continue
         for part, is_emoji in _pieces(chunk):

@@ -22,6 +22,8 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(presentation._PACK_EMOJIS.clear)
         presentation._PACK_ICONS.clear()
         self.addCleanup(presentation._PACK_ICONS.clear)
+        presentation._PACK_GLYPHS.clear()
+        self.addCleanup(presentation._PACK_GLYPHS.clear)
 
     def bot(self):
         with patch.dict(os.environ, {'ALL_PROXY': '', 'HTTPS_PROXY': '',
@@ -62,6 +64,8 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
             'NewsEmoji': [N(emoji='🅱️', custom_emoji_id='111')],
             'IslomjonAnimeEmoji': [N(emoji='📍', custom_emoji_id='222')],
             'logowbtg': [N(emoji='🚕', custom_emoji_id='333')],
+            'FinanceEmoji': [N(emoji='🚗', custom_emoji_id='444'),
+                             N(emoji='⚡', custom_emoji_id='555')],
         }
         async def get_set(name):
             return N(stickers=packs.get(name, []))
@@ -73,6 +77,13 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(presentation._PACK_ICONS['DRIVER'], '333')
         self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
         self.assertEqual(presentation.premium_id('📝'), None)
+        from bot.handlers.start import main_keyboard
+        menu = main_keyboard('tashkent').keyboard
+        self.assertEqual(menu[1][0].api_kwargs['icon_custom_emoji_id'], '444')
+        self.assertEqual(menu[1][1].api_kwargs['icon_custom_emoji_id'], '555')
+        self.assertIn('emoji-id="333"', presentation.premium_markup('DRIVER', '🚕'))
+        self.assertIn('emoji-id="444"', presentation.premium_markup('BRAND', '🎨'))
+        self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
 
     def test_button_click_data_survives_premium_render(self):
         markup = InlineKeyboardMarkup([[InlineKeyboardButton('✅ Tayyor', callback_data='op:ready:5')]])

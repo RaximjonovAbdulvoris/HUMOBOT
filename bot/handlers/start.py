@@ -1,5 +1,5 @@
 from hashlib import sha256
-from bot.presentation import menu_button, send_brand_sticker
+from bot.presentation import menu_button, premium_markup, send_brand_sticker
 from pathlib import Path
 from uuid import uuid4
 
@@ -45,9 +45,11 @@ TASHKENT_OFFICE_KEYBOARD = InlineKeyboardMarkup([
 
 def main_keyboard(region: str) -> ReplyKeyboardMarkup:
     rows = [[menu_button(MENU_DRIVER, "success", icon="DRIVER", emoji="🚕")],
-            [menu_button(MENU_BRAND, emoji="🎨"), menu_button(MENU_SPECTRE, emoji="⚡")],
-            [menu_button(MENU_CONTACT, emoji="📞"), menu_button(MENU_OFFICE, emoji="📍")],
-            [menu_button(MENU_REGION, emoji="🔄")]]
+            [menu_button(MENU_BRAND, icon="BRAND", emoji="🎨"),
+             menu_button(MENU_SPECTRE, icon="SPECTRE", emoji="⚡")],
+            [menu_button(MENU_CONTACT, icon="CONTACT", emoji="📞"),
+             menu_button(MENU_OFFICE, icon="LOCATION", emoji="📍")],
+            [menu_button(MENU_REGION, icon="REGION", emoji="🔄")]]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -99,9 +101,9 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not region:
         return await start(update, context)
     details = (
-        "📝 <b>Ulanish uchun ariza</b> — haydovchi sifatida ro‘yxatdan o‘tish.\n"
-        "🎨 <b>Brend ariza</b> — avtomobilni brendlash uchun murojaat.\n"
-        "⚡ <b>Spectre Energyga ariza</b> — avtomobil ma’lumotlarini yuborish.\n"
+        f"{premium_markup('DRIVER', '🚕')} <b>Ulanish uchun ariza</b> — haydovchi sifatida ro‘yxatdan o‘tish.\n"
+        f"{premium_markup('BRAND', '🎨')} <b>Brend ariza</b> — avtomobilni brendlash uchun murojaat.\n"
+        f"{premium_markup('SPECTRE', '⚡')} <b>Spectre Energyga ariza</b> — avtomobil ma’lumotlarini yuborish.\n"
         "📞 Aloqa ma’lumotlari va 📍 ofis manzili ham quyidagi menyuda."
     )
     await update.effective_message.reply_text(
