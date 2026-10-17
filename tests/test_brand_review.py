@@ -39,10 +39,9 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
         await brand_review.on_review(update, context)
         self.assertEqual(review['status'], 'approved')
         self.assertTrue(context.bot_data['brand_sheets_outbox']['HM-000001']['approved'])
-        context.bot.send_message.assert_awaited_once()
-        self.assertEqual(context.bot.send_message.await_args.kwargs['chat_id'], 2001)
+        context.bot.send_message.assert_not_awaited()
         await brand_review.on_review(update, context)
-        self.assertEqual(context.bot.send_message.await_count, 1)
+        context.bot.send_message.assert_not_awaited()
 
     async def test_rejection_deletes_post_and_never_exports(self):
         context, review, update = self.setup_review()
@@ -61,9 +60,10 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
             send.assert_not_awaited()
             await brand_review.on_review(update, context)
             self.assertEqual(context.bot_data['brand_sheets_outbox']['HM-000001']['payload']['kind'], 'spectre')
-            self.assertIn('Spectre Energy', context.bot.send_message.await_args.kwargs['text'])
+            context.bot.send_message.assert_not_awaited()
             await brand_sheets.flush(context)
         self.assertEqual(review['status'], 'exported')
+        context.bot.send_message.assert_not_awaited()
         self.assertIn('Google Sheetsga to‘ldirildi', context.bot.edit_message_text.await_args.kwargs['text'])
 
     async def test_spectre_rejection_removes_post_and_blocks_export(self):
@@ -85,6 +85,7 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Google Sheetsga to‘ldirildi',
                       context.bot.edit_message_text.await_args.kwargs['text'])
         self.assertIsNone(context.bot.edit_message_text.await_args.kwargs['reply_markup'])
+        context.bot.send_message.assert_not_awaited()
 
     async def test_namangan_approval_keeps_region_until_export(self):
         context, review, update = self.setup_review()
