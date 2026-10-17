@@ -102,8 +102,8 @@ def clean_place(text):
 
 
 def licence_identity(words):
-    # Identify the printed 1 and 2 rows; field 2 may continue onto a second
-    # line (patronymic). Require the 3 row as a lower boundary when available.
+    # Only the printed field 2 belongs to the given name. The line below it
+    # often contains the patronymic and must not be shown to operators.
     def numbered(rank):
         result = []
         for word in words:
@@ -114,7 +114,7 @@ def licence_identity(words):
                 result.append((word, clean_name(match[1]) if match[1] else None))
         return result
 
-    ones, twos, threes = numbered(1), numbered(2), numbered(3)
+    ones, twos = numbered(1), numbered(2)
     if len(ones) != 1 or len(twos) != 1:
         return None
     first, first_attached = ones[0]
@@ -135,23 +135,11 @@ def licence_identity(words):
         choices = [(word, value) for word, value in choices if value]
         return choices[0] if len(choices) == 1 else (None, None)
 
-    surname_word, surname = row_value(first, first_attached)
-    given_word, given = row_value(second, second_attached)
+    _, surname = row_value(first, first_attached)
+    _, given = row_value(second, second_attached)
     if not surname or not given:
         return None
-    boundary = min((w.top for w, _ in threes if w.top > second.top), default=second.top + second.height * 3)
-    continued = [(w, clean_name(w.text)) for w in words if w.confidence >= 85
-                 and w is not given_word and w is not surname_word
-                 and given_word.top + .65 * given_word.height < w.top < boundary
-                 and abs(w.left - given_word.left) < max(w.height, given_word.height) * .7]
-    continued = [(w, value) for w, value in continued if value]
-    if len(continued) > 1:
-        return None
-    name = given + (' ' + continued[0][1] if continued else '')
-    # The recognizer sometimes joins the printed patronymic suffix to the
-    # preceding name even though the licence shows a word gap.
-    name = re.sub(r"(?<=[^\W\d_])(?=O['‘’ʼ`]G['‘’ʼ`]LI$)", ' ', name, flags=re.I)
-    return (surname, name) if clean_name(surname + ' ' + name) else None
+    return (surname, given) if clean_name(surname + ' ' + given) else None
 
 
 def licence_name(words):
@@ -305,11 +293,11 @@ def read_document(engine, raw, source, emit=None):
     # mild sharpening can separate letters softened by camera focus.
     required = ('full_name', 'pinfl', 'birth_date', 'birth_place',
                 'license_number', 'license_expiry') if source == 'license_front' else ('vehicle_registration',)
+    other = []
     if any(not values.get(key) for key in required):
         grayscale = ImageOps.autocontrast(image.convert('L'), cutoff=1)
         enhanced = grayscale.filter(ImageFilter.UnsharpMask(radius=1, percent=130, threshold=2)).convert('RGB')
         second, _ = engine(np.array(ImageOps.invert(enhanced))[:, :, ::-1].copy())
-        other = []
         for box, text, confidence in second or []:
             left, top = min(p[0] for p in box), min(p[1] for p in box)
             other.append(Word(text, confidence * 100, left, top,
@@ -329,7 +317,15 @@ def read_document(engine, raw, source, emit=None):
     if source.startswith('tech_'):
         # A full-frame OCR confidence score alone is insufficient on holograms.
         # This also excludes serial-looking text from the vehicle data rows.
-        confirmed = refine_registration(engine, image, words)
+        # The normal and contrast passes can detect the same serial in
+        # different boxes. Deduplicate matching readings, but never resolve
+        # conflicting readings by majority vote.
+        serial_words = [w for w in words + other if w.confidence >= 90 and
+                        re.fullmatch(SERIAL, w.text.strip().upper()) and
+                        w.left >= .60 * image.width and w.top < .75 * image.height]
+        distinct = {normalize({'vehicle_registration': w.text})['vehicle_registration']
+                    for w in serial_words}
+        confirmed = refine_registration(engine, image, serial_words[:1]) if len(distinct) == 1 else None
         values['vehicle_registration'] = confirmed if confirmed == values.get('vehicle_registration') else None
     return guard_identifiers(values)[0]
 
