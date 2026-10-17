@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from html import escape as h
 
 from telegram import (
@@ -223,13 +224,16 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         phone = update.message.contact.phone_number
     elif update.message.text:
         phone = update.message.text.strip()
-    if not phone or len(phone) < 7 or not any(c.isdigit() for c in phone):
+    digits = re.sub(r'\D', '', phone or '')
+    if len(digits) == 9:
+        digits = '998' + digits
+    if not re.fullmatch(r'998[0-9]{9}', digits):
         await update.message.reply_text(
             "❗ Iltimos, telefon raqamingizni knopka orqali jo'nating "
-            "yoki to'g'ri raqam kiriting (masalan: +998901234567):"
+            "yoki to'g'ri raqam kiriting (masalan: 998901234567):"
         )
         return PHONE
-    context.user_data["phone"] = phone
+    context.user_data["phone"] = digits
 
     await update.message.reply_text(
         "⚠️ *Diqqat!*\n\n"
@@ -355,6 +359,20 @@ async def _send_car_photo_prompt(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     cache = context.bot_data.setdefault("template_file_ids", {})
+    paths = [template_path(name) for name in car_names]
+    if paths[0] and len(set(paths)) == 1 and 'car_sides.' in paths[0]:
+        try:
+            if cache.get('car_front'):
+                await update.message.reply_photo(photo=cache['car_front'], caption=instruction,
+                                                 parse_mode='Markdown')
+            else:
+                with open(paths[0], 'rb') as original:
+                    await update.message.reply_photo(photo=original, caption=instruction,
+                                                     parse_mode='Markdown')
+        except Exception as error:
+            logger.warning('car template yuborilmadi: %s', type(error).__name__)
+            await update.message.reply_text(instruction, parse_mode='Markdown')
+        return
     media = []
     opened_files = []
 
