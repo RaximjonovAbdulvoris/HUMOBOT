@@ -45,6 +45,13 @@ class QueueMoveTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(success)
         self.assertIn('sozlanmagan', reason)
         self.assertFalse(bot.groups)
+        record['queue_destinations'] = {'incomplete': '-2001'}
+        with patch.dict(os.environ, {'SEPARATE_REGION_GROUPS': '1'}), \
+             patch('bot.queue_moves.destination', side_effect=lambda route: '-3001' if route == 'NAMANGAN_INCOMPLETE_GROUP' else ''):
+            success, reason = await move_to_review(ctx, key, record, 'incomplete')
+        self.assertFalse(success)
+        self.assertIn('mos emas', reason)
+        self.assertFalse(bot.groups)
 
     async def move(self,action='incomplete'):
         bot,ctx,key,msg=self.case()
