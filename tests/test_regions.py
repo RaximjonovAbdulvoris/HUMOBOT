@@ -334,7 +334,7 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
         }), patch("bot.handlers.driver.next_index", return_value=0):
             for region, destination in (("namangan", "-301"), ("tashkent", "-302")):
                 ctx = context(region)
-                self.assertEqual(await driver.start_driver(update(), ctx), driver.NAME)
+                self.assertEqual(await driver.start_driver(update(), ctx), driver.PHONE)
                 ctx.user_data.update({
                     "name": "Test", "phone": "+998901234567", "car_plate": "01A123BC",
                     "user_id": 123, "passport_front": "photo1", "passport_back": "photo2",
