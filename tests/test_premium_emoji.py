@@ -82,14 +82,14 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(presentation._PACK_ICONS['DRIVER'], '333')
         self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
         self.assertEqual(presentation.premium_id('📝'), None)
-        self.assertEqual(presentation.premium_id('📞'), '777')
-        self.assertEqual(presentation._PACK_ICONS['CONTACT'], '777')
+        self.assertEqual(presentation.premium_id('📞'), presentation.CONTACT_EMOJI_ID)
+        self.assertEqual(presentation._PACK_ICONS['CONTACT'], presentation.CONTACT_EMOJI_ID)
         self.assertEqual(presentation._PACK_ICONS['SPECTRE'], '555')
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][0].api_kwargs['icon_custom_emoji_id'], '444')
         self.assertEqual(menu[1][1].api_kwargs['icon_custom_emoji_id'], '555')
-        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], '777')
+        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
         self.assertIn('emoji-id="333"', presentation.premium_markup('DRIVER', '🚕'))
         self.assertIn('emoji-id="444"', presentation.premium_markup('BRAND', '🎨'))
         self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
@@ -99,10 +99,10 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
             return N(stickers=[N(emoji='📱', custom_emoji_id='777')]
                      if name == 'IslomjonAnimeEmoji' else [])
         await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
-        self.assertEqual(presentation.premium_id('📞'), '777')
+        self.assertEqual(presentation.premium_id('📞'), presentation.CONTACT_EMOJI_ID)
         contact = presentation.contact_button()
         self.assertTrue(contact.request_contact)
-        self.assertEqual(contact.api_kwargs['icon_custom_emoji_id'], '777')
+        self.assertEqual(contact.api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
 
     async def test_coin_and_battery_cannot_replace_phone_and_energy(self):
         async def get_set(name):
@@ -110,12 +110,21 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
                                N(emoji='🔋', custom_emoji_id='888')]
                      if name == 'FinanceEmoji' else [])
         await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
-        self.assertNotIn('CONTACT', presentation._PACK_ICONS)
+        self.assertEqual(presentation._PACK_ICONS['CONTACT'], presentation.CONTACT_EMOJI_ID)
         self.assertNotIn('SPECTRE', presentation._PACK_ICONS)
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][1].text, '⚡ Spectre Energyga ariza')
-        self.assertEqual(menu[2][0].text, "📞 Bog'lanish uchun")
+        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
+
+    def test_owner_phone_icon_is_used_in_menu_and_contact_text(self):
+        from bot.handlers.start import main_keyboard, show_menu
+        menu = main_keyboard('tashkent').keyboard
+        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], presentation.CONTACT_EMOJI_ID)
+        markup = presentation.premium_markup('CONTACT', '📞')
+        self.assertIn(f'emoji-id="{presentation.CONTACT_EMOJI_ID}"', markup)
+        self.assertIn(f'emoji-id="{presentation.CONTACT_EMOJI_ID}"',
+                      premium_html('📞 Aloqa', 'HTML'))
 
     async def test_operator_icons_follow_the_actual_status(self):
         assets = [N(emoji=glyph, custom_emoji_id=icon) for glyph, icon in
