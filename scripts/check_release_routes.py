@@ -15,7 +15,10 @@ def validate_routes(routes):
     errors = []
     required = ('DRIVER_GROUP_1', 'BRAND_GROUP', 'TASHKENT_DRIVER_GROUP_1',
                 'TASHKENT_BRAND_GROUP', 'NAMANGAN_SPECTRE_GROUP',
-                'TASHKENT_SPECTRE_GROUP')
+                'TASHKENT_SPECTRE_GROUP', 'NAMANGAN_INCOMPLETE_GROUP',
+                'NAMANGAN_OTHER_PARK_GROUP', 'TASHKENT_INCOMPLETE_GROUP',
+                'TASHKENT_OTHER_PARK_GROUP', 'ARCHIVE_GROUP',
+                'TASHKENT_ARCHIVE_GROUP')
     optional = ('DRIVER_GROUP_2', 'TASHKENT_DRIVER_GROUP_2')
     for key in required + optional:
         value = routes.get(key, '')
@@ -39,12 +42,14 @@ def main():
     if os.environ.get('TELEGRAM_BOT_TOKEN', '').split(':')[0] == '8845908442':
         print('Bu test bot tokeni; asosiy bot sozlamasini alohida tekshiring.')
         return 1
-    keys = ('DRIVER_GROUP_1', 'DRIVER_GROUP_2', 'BRAND_GROUP')
+    keys = ('DRIVER_GROUP_1', 'DRIVER_GROUP_2', 'BRAND_GROUP', 'ARCHIVE_GROUP')
     routes = {key: os.environ.get(key, '').strip() for key in keys}
     try:
         for key in ('TASHKENT_DRIVER_GROUP_1', 'TASHKENT_DRIVER_GROUP_2',
                     'TASHKENT_BRAND_GROUP', 'NAMANGAN_SPECTRE_GROUP',
-                    'TASHKENT_SPECTRE_GROUP'):
+                    'TASHKENT_SPECTRE_GROUP', 'NAMANGAN_INCOMPLETE_GROUP',
+                    'NAMANGAN_OTHER_PARK_GROUP', 'TASHKENT_INCOMPLETE_GROUP',
+                    'TASHKENT_OTHER_PARK_GROUP', 'TASHKENT_ARCHIVE_GROUP'):
             routes[key] = destination(key)
         errors = validate_routes(routes)
         if configuration() is None:

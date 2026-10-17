@@ -10,6 +10,33 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 STATE = ROOT / '.test-bot-state'
 
+APPLICATION_KEYS = ('DRIVER_GROUP_1', 'DRIVER_GROUP_2', 'BRAND_GROUP',
+                    'TASHKENT_DRIVER_GROUP_1', 'TASHKENT_DRIVER_GROUP_2',
+                    'TASHKENT_BRAND_GROUP', 'TASHKENT_SPECTRE_GROUP',
+                    'NAMANGAN_SPECTRE_GROUP')
+CITY_KEYS = ('NAMANGAN_INCOMPLETE_GROUP', 'NAMANGAN_OTHER_PARK_GROUP',
+             'TASHKENT_INCOMPLETE_GROUP', 'TASHKENT_OTHER_PARK_GROUP',
+             'ARCHIVE_GROUP', 'TASHKENT_ARCHIVE_GROUP')
+DEFAULT_GROUPS = {
+    'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
+    'BRAND_GROUP': '-5422883968',
+    'TASHKENT_DRIVER_GROUP_1': '-5258426588', 'TASHKENT_DRIVER_GROUP_2': '-5468071353',
+    'TASHKENT_BRAND_GROUP': '-5422883968', 'TASHKENT_SPECTRE_GROUP': '-5243428930',
+    'NAMANGAN_SPECTRE_GROUP': '-5243428930',
+}
+
+
+def group_routes(values):
+    if values.get('SEPARATE_REGION_GROUPS') != '1':
+        return {**DEFAULT_GROUPS, 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
+                'TASHKENT_ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', '')}
+    from scripts.check_release_routes import validate_routes
+    routes = {key: values.get(key, '').strip() for key in APPLICATION_KEYS + CITY_KEYS}
+    errors = validate_routes(routes)
+    if errors:
+        raise ValueError('Separate region groups need unique IDs: ' + '; '.join(errors))
+    return routes
+
 
 def configure():
     envfile = ROOT / '.env.test'
@@ -22,20 +49,19 @@ def configure():
     token = values.get('TELEGRAM_BOT_TOKEN', '')
     if token.split(':')[0] != '8845908442':
         raise ValueError('Only the authorized test bot token is accepted in .env.test')
+    groups = group_routes(values)
     os.environ.update({
         'TELEGRAM_BOT_TOKEN': token,
         'DOCUMENT_AI_ENABLED': values.get('DOCUMENT_AI_ENABLED', '1'),
         'DOCUMENT_OCR_BACKEND': values.get('DOCUMENT_OCR_BACKEND', 'fast'),
         'LOCAL_OCR_MODEL': values.get('LOCAL_OCR_MODEL', 'qwen2.5vl:3b'),
-        'DRIVER_GROUP_1': '-5258426588', 'DRIVER_GROUP_2': '-5468071353',
-        'BRAND_GROUP': '-5422883968', 'ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
-        'TASHKENT_DRIVER_GROUP_1': '-5258426588', 'TASHKENT_DRIVER_GROUP_2': '-5468071353',
-        'TASHKENT_BRAND_GROUP': '-5422883968', 'TASHKENT_SPECTRE_GROUP': '-5243428930',
-        'NAMANGAN_SPECTRE_GROUP': '-5243428930', 'TASHKENT_ARCHIVE_GROUP': values.get('ARCHIVE_GROUP', ''),
+        **groups, 'SEPARATE_REGION_GROUPS': values.get('SEPARATE_REGION_GROUPS', ''),
         'PERSIST_DIR': str(STATE), 'SUBSCRIPTION_CHANNEL_ID': '@WB_HUMO_TAXI',
     })
     for key in ("INCOMPLETE_GROUP", "OTHER_PARK_GROUP", "WELCOME_STICKER_ID", "SUCCESS_STICKER_ID"):
         os.environ[key] = values.get(key, "")
+    for key in CITY_KEYS[:4]:
+        os.environ[key] = groups.get(key, '')
     for key in ("BRAND_SHEETS_WEBHOOK_URL", "BRAND_SHEETS_SECRET", "DRIVER_WARNING_VOICE_FILE_ID"):
         os.environ[key] = values.get(key, "")
     for action in ("READY", "PROGRESS", "INCOMPLETE", "OTHERPARK", "DELETE"):
@@ -45,7 +71,8 @@ def configure():
     # Local routing overrides take precedence, so explicitly isolate these too.
     routes = {key: os.environ[key] for key in (
         'TASHKENT_DRIVER_GROUP_1', 'TASHKENT_DRIVER_GROUP_2', 'TASHKENT_BRAND_GROUP',
-        'TASHKENT_SPECTRE_GROUP', 'NAMANGAN_SPECTRE_GROUP')}
+        'TASHKENT_SPECTRE_GROUP', 'NAMANGAN_SPECTRE_GROUP', 'TASHKENT_ARCHIVE_GROUP',
+        *CITY_KEYS[:4]) if os.environ[key] or key == 'TASHKENT_DRIVER_GROUP_2'}
     (STATE / 'bot_routes.json').write_text(json.dumps(routes))
 
 
@@ -71,12 +98,13 @@ async def preflight():
         me = bot.bot
         if me.username.lower() != 'testthumo_bot':
             raise ValueError('Unexpected test bot identity')
-        chats = (-5258426588, -5468071353, -5422883968, -5243428930)
+        chats = tuple(sorted({int(os.environ[key]) for key in APPLICATION_KEYS if os.environ.get(key)}))
         members = await asyncio.gather(*(bot.get_chat_member(chat, me.id) for chat in chats))
         for chat, member in zip(chats, members):
             if member.status != 'administrator' or not member.can_delete_messages:
                 raise ValueError(f'Test bot needs admin/delete rights in {chat}')
-        optional = {os.environ.get(name, '') for name in ('INCOMPLETE_GROUP', 'OTHER_PARK_GROUP', 'ARCHIVE_GROUP')}
+        optional = {os.environ.get(name, '') for name in
+                    ('INCOMPLETE_GROUP', 'OTHER_PARK_GROUP', *CITY_KEYS)}
         for chat in sorted(optional - {''}):
             if not chat.startswith('-') or not chat[1:].isdigit():
                 raise ValueError('Invalid review/archive group ID')
@@ -86,7 +114,7 @@ async def preflight():
         webhook = await bot.get_webhook_info()
         if webhook.url:
             raise ValueError('Test bot has an existing webhook; stop that instance first')
-        print('Test bot identity and four groups verified.', flush=True)
+        print(f'Test bot identity and {len(chats)} application groups verified.', flush=True)
 
 
 def main():
@@ -106,7 +134,8 @@ def main():
     subscription.DEFAULT_REQUIRED_CHATS = ()
     subscription.NAMANGAN_REQUIRED_CHATS = ()
     import bot.main as application
-    print('TEST MODE: fixed application groups, configured review/archive groups; no subscription gate.', flush=True)
+    mode = 'separate regional' if os.environ.get('SEPARATE_REGION_GROUPS') == '1' else 'shared fixed'
+    print(f'TEST MODE: {mode} application groups, configured review/archive groups; no subscription gate.', flush=True)
     asyncio.set_event_loop(asyncio.new_event_loop())
     application.main()
     return 0
