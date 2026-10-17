@@ -63,6 +63,8 @@ def build_operator_keyboard(
     if not review:
         rows.append([button("📷 Chala rasm", "incomplete"), button("🚕 Boshqa park", "otherpark")])
     rows.append([button("🗑 O‘chirish", "delete")])
+    if not review:
+        rows.append([button("📦 Hujjatlarni yuklab olish", "download")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -651,7 +653,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    if action in ("ready", "progress", "incomplete", "otherpark", "delete") and resolved is None:
+    if action in ("ready", "progress", "incomplete", "otherpark", "delete", "download") and resolved is None:
         await query.message.reply_text(
             "⚠️ Bu tugma boshqa yoki eski arizaga tegishli. Ariza o‘zgartirilmadi."
         )
@@ -687,6 +689,17 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         result, detail = await move_to_review(context, key, record, action)
         if not result:
             await query.message.reply_text(detail)
+        return
+
+    if action == 'download':
+        from bot.application_download import send_archive
+        try:
+            await send_archive(context.bot, resolved[1], chat.id, query.message.message_id)
+        except ValueError as error:
+            await query.message.reply_text(str(error))
+        except Exception as error:
+            logger.warning('Application ZIP unavailable (%s)', type(error).__name__)
+            await query.message.reply_text('⚠️ Hujjatlarni ZIPga yig‘ib bo‘lmadi. Birozdan keyin qayta bosing.')
         return
 
     if action == "delete":
