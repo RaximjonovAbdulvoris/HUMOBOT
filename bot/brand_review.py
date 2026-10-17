@@ -18,16 +18,19 @@ def review_keyboard(code):
     ]])
 
 
-def stage_review(context, data, code, region, group_id, text, applicant_id):
+def stage_review(context, data, code, region, group_id, text, applicant_id, kind='brand'):
+    if kind not in ('brand', 'spectre'):
+        raise ValueError('Unknown review kind')
     reviews = context.bot_data.setdefault('brand_reviews', {})
     review = reviews.setdefault(code, {
-        'code': code, 'region': region, 'group_id': str(group_id),
+        'code': code, 'kind': kind, 'region': region, 'group_id': str(group_id),
         'message_id': None, 'text': text, 'status': 'pending',
         'applicant_id': applicant_id,
         'fields': {key: str(data.get(key, '')) for key in (
             'b_name', 'b_phone', 'b_model', 'b_year', 'b_color', 'b_plate')},
     })
-    if review['group_id'] != str(group_id) or review['region'] != region:
+    if (review['group_id'] != str(group_id) or review['region'] != region
+            or review.get('kind', 'brand') != kind):
         raise ValueError('Application review route changed')
     return review
 
@@ -82,12 +85,14 @@ async def sync_all(context):
 async def notify_applicant(context, review):
     if review.get('applicant_notified') or not review.get('applicant_id'):
         return
+    kind = review.get('kind', 'brand')
+    subject = 'Spectre Energy' if kind == 'spectre' else 'brendlash'
     if review['status'] == 'rejected':
         text = ('Arizangiz ko‘rib chiqildi. Afsuski, avtomobilingiz yoki yuborgan '
-                'ma’lumotlaringiz brendlash talablariga mos kelmagani uchun arizangiz '
+                f'ma’lumotlaringiz {subject} talablariga mos kelmagani uchun arizangiz '
                 'tasdiqlanmadi.\n\nSavollar bo‘lsa, +998 78 113 80 81 raqamiga murojaat qiling.')
     elif review['status'] in ('approved', 'exported'):
-        text = ('Arizangiz ko‘rib chiqildi va brendlash uchun tasdiqlandi. '
+        text = (f'Arizangiz ko‘rib chiqildi va {subject} uchun tasdiqlandi. '
                 'Tez orada siz bilan bog‘lanamiz.\n\nSavollar bo‘lsa, '
                 '+998 78 113 80 81 raqamiga murojaat qiling.')
     else:
@@ -139,7 +144,7 @@ async def on_review(update, context):
             previous = dict(outbox[code]) if code in outbox else None
             try:
                 enqueue(context, review['fields'], user, code, review['region'],
-                        kind='brand', approved=True)
+                        kind=review.get('kind', 'brand'), approved=True)
             except ValueError:
                 await query.answer('Sheets navbatini yaratib bo‘lmadi.', show_alert=True)
                 return
