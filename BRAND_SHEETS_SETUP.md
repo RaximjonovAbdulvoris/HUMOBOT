@@ -46,3 +46,16 @@ Offline validation:
 venv/bin/python -m unittest discover -s tests -q
 node tests/test_brand_sheets_receiver.js
 ```
+# Operator approval
+
+Brend arizasi avval hududdagi operator guruhiga yuboriladi. Guruh administratori
+**Tasdiqlansin** tugmasini bosgandan keyingina ariza Google Sheets navbatiga
+qo‘shiladi. Muvaffaqiyatli yozilgach guruh postida «Tasdiqlandi va Google
+Sheetsga to‘ldirildi» ko‘rinadi. **To‘g‘ri kelmadi** bosilsa ariza Sheetsga
+yuborilmaydi, arizachiga xabar boradi va guruh posti o‘chiriladi. Spectre
+arizalarining avvalgi avtomatik yuborish tartibi saqlanadi.
+
+Ilgari navbatda qolgan, operator tomonidan tasdiqlanmagan Brend arizalari
+avtomatik eksport qilinmaydi. Botni yangilash uchun VPSda `git pull --ff-only`
+va `systemctl restart humobot-test` buyrug‘ini bajaring; botga operator guruhidagi
+xabarlarni o‘chirish huquqi kerak.

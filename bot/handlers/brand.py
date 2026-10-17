@@ -1,6 +1,6 @@
 import logging
 from bot.application_ids import application_code
-from bot.presentation import menu_button, send_brand_sticker
+from bot.presentation import contact_button, menu_button, send_brand_sticker
 from html import escape as h
 
 from telegram import (
@@ -173,7 +173,7 @@ async def brand_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return BRAND_NAME
     context.user_data["b_name"] = name
     keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton("📞 Raqamni jo‘natish", request_contact=True)]],
+        [[contact_button("Raqamni jo‘natish")]],
         resize_keyboard=True, one_time_keyboard=True,
     )
     await update.message.reply_text(
@@ -297,16 +297,30 @@ async def brand_get_plate(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"🔢 Davlat raqami: {h(data['b_plate'])}"
     )
     try:
+        from bot.queue_moves import checkpoint
+        review = None
+        if kind == 'brand':
+            from bot.brand_review import stage_review, review_keyboard, status_text
+            review = stage_review(context, data, code, region, group_id, text, user.id)
+            if not await checkpoint(context):
+                raise RuntimeError('Brand review state could not be saved')
         if not data.get('_brand_group_message'):
             message = await context.bot.send_message(
-                chat_id=group_id, text=text, parse_mode=ParseMode.HTML, reply_markup=None)
+                chat_id=group_id,
+                text=status_text(review) if review else text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=review_keyboard(code) if review else None)
             data['_brand_group_message'] = message.message_id
-        if kind in ('brand', 'spectre'):
+        if review:
+            review['message_id'] = data['_brand_group_message']
+            review['displayed_status'] = 'pending'
+            if not await checkpoint(context):
+                raise RuntimeError('Brand review message could not be saved')
+        else:
             from bot.brand_sheets import enqueue
             enqueue(context, data, user, code, region, kind=kind)
-            from bot.queue_moves import checkpoint
-            await checkpoint(context)
-        # The periodic exporter retries independently of Telegram delivery.
+            if not await checkpoint(context):
+                raise RuntimeError('Spectre export state could not be saved')
     except Exception as error:
         logger.warning("Brand submission failed (%s)", type(error).__name__)
         if isinstance(error, NetworkError) and not isinstance(error, BadRequest):

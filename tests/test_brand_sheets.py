@@ -19,7 +19,7 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
     def enqueue(self, ctx):
         sheets.enqueue(ctx, {'b_name': '=1+1', 'b_phone': '+998000000000',
             'b_model': 'TEST', 'b_year': '2020', 'b_color': 'Oq', 'b_plate': '01A123BC'},
-            N(username='test', id=123), 'HM-000001', 'tashkent')
+            N(username='test', id=123), 'HM-000001', 'tashkent', approved=True)
 
     def test_signature_covers_timestamp_and_payload(self):
         body = sheets.signed({'code': 'HM-000001', 'row': ['example']}, SECRET, 1700000000)
@@ -89,11 +89,24 @@ class BrandSheetsTests(unittest.IsolatedAsyncioTestCase):
         for region in ('tashkent', 'namangan'):
             for kind in ('brand', 'spectre'):
                 ctx = self.context()
-                sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000001', region, kind=kind)
+                sheets.enqueue(ctx, {}, N(username=None, id=1), 'HM-000001', region,
+                               kind=kind, approved=(kind == 'brand'))
                 payload = ctx.bot_data['brand_sheets_outbox']['HM-000001']['payload']
                 self.assertEqual((payload['region'], payload['kind']), (region, kind))
         with self.assertRaises(ValueError):
-            sheets.enqueue(self.context(), {}, N(username=None, id=1), 'HM-000001', 'unknown')
+            sheets.enqueue(self.context(), {}, N(username=None, id=1), 'HM-000001', 'unknown', approved=True)
+
+    async def test_brand_requires_approval_even_for_legacy_outbox(self):
+        ctx = self.context()
+        with self.assertRaises(ValueError):
+            sheets.enqueue(ctx, {}, N(id=1), 'HM-000001', 'tashkent')
+        ctx.bot_data['brand_sheets_outbox'] = {'HM-000001': {
+            'status': 'pending', 'payload': {'code': 'HM-000001', 'kind': 'brand',
+                'region': 'tashkent', 'fields': {}}}}
+        with patch.object(sheets, 'configuration', return_value=(URL, SECRET)), \
+             patch.object(sheets, 'post_export', AsyncMock()) as send:
+            await sheets.flush(ctx)
+        send.assert_not_awaited()
 
     def test_queued_v1_brand_payload_migrates_without_losing_route(self):
         old = {'code': 'HM-000001', 'row': ['HM-000001', '2026-01-01', 'Namangan shahri',

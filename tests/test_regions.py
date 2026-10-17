@@ -316,7 +316,14 @@ class RegionalTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     await handler(update(answer), ctx)
                 self.assertEqual(str(ctx.bot.send_message.call_args.kwargs["chat_id"]), destination)
-                self.assertIsNone(ctx.bot.send_message.call_args.kwargs["reply_markup"])
+                markup = ctx.bot.send_message.call_args.kwargs["reply_markup"]
+                if kind == 'brand':
+                    self.assertEqual(len(markup.inline_keyboard[0]), 2)
+                    self.assertFalse(ctx.bot_data.get('brand_sheets_outbox'))
+                    self.assertEqual(next(iter(ctx.bot_data['brand_reviews'].values()))['status'], 'pending')
+                else:
+                    self.assertIsNone(markup)
+                    self.assertEqual(len(ctx.bot_data['brand_sheets_outbox']), 1)
                 self.assertFalse(ctx.bot_data.get("applications"))
                 self.assertFalse(ctx.bot_data.get("app_messages"))
                 self.assertEqual(ctx.user_data, {"region": region})

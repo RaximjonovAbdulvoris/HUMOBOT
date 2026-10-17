@@ -85,6 +85,8 @@ def register_handlers(app) -> None:
     app.add_handler(CommandHandler("asset_id", asset_id, filters.ChatType.PRIVATE))
     app.add_handler(build_region_handler())
     app.add_handler(build_application_conversation())
+    from bot.brand_review import handler as brand_review_handler
+    app.add_handler(brand_review_handler())
     register_operator_handlers(app)
     app.add_handler(CallbackQueryHandler(
         stale_subscription, pattern=r"^(?:driver|brand|spectre):check_membership$",

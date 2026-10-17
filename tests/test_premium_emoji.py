@@ -82,17 +82,27 @@ class PremiumEmojiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(presentation._PACK_ICONS['DRIVER'], '333')
         self.assertIn('emoji-id="222"', premium_html('📍 Toshkent shahri', 'HTML'))
         self.assertEqual(presentation.premium_id('📝'), None)
-        self.assertIsNone(presentation.premium_id('📞'))
-        self.assertNotIn('CONTACT', presentation._PACK_ICONS)
+        self.assertEqual(presentation.premium_id('📞'), '777')
+        self.assertEqual(presentation._PACK_ICONS['CONTACT'], '777')
         self.assertEqual(presentation._PACK_ICONS['SPECTRE'], '555')
         from bot.handlers.start import main_keyboard
         menu = main_keyboard('tashkent').keyboard
         self.assertEqual(menu[1][0].api_kwargs['icon_custom_emoji_id'], '444')
         self.assertEqual(menu[1][1].api_kwargs['icon_custom_emoji_id'], '555')
-        self.assertEqual(menu[2][0].text, "📞 Bog'lanish uchun")
+        self.assertEqual(menu[2][0].api_kwargs['icon_custom_emoji_id'], '777')
         self.assertIn('emoji-id="333"', presentation.premium_markup('DRIVER', '🚕'))
         self.assertIn('emoji-id="444"', presentation.premium_markup('BRAND', '🎨'))
         self.assertEqual(premium_html(presentation.premium_markup('BRAND', '🎨') + ' 📍', 'HTML').count('<tg-emoji'), 2)
+
+    async def test_actual_phone_asset_keeps_contact_request(self):
+        async def get_set(name):
+            return N(stickers=[N(emoji='📱', custom_emoji_id='777')]
+                     if name == 'IslomjonAnimeEmoji' else [])
+        await presentation.load_emoji_packs(N(bot=N(get_sticker_set=get_set), bot_data={}))
+        self.assertEqual(presentation.premium_id('📞'), '777')
+        contact = presentation.contact_button()
+        self.assertTrue(contact.request_contact)
+        self.assertEqual(contact.api_kwargs['icon_custom_emoji_id'], '777')
 
     async def test_coin_and_battery_cannot_replace_phone_and_energy(self):
         async def get_set(name):

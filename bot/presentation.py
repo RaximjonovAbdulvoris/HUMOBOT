@@ -26,6 +26,13 @@ def menu_button(label, style='primary', icon=None, emoji=None):
     return KeyboardButton(label, api_kwargs=extra)
 
 
+def contact_button(label="Raqamni jo'natish"):
+    chosen = os.environ.get('PREMIUM_ICON_CONTACT', '') or _PACK_ICONS.get('CONTACT', '')
+    extra = {'icon_custom_emoji_id': chosen} if re.fullmatch(r'[0-9]+', chosen) else {}
+    return KeyboardButton(label if extra else f'📞 {label}',
+                          request_contact=True, api_kwargs=extra)
+
+
 async def send_brand_sticker(message, event):
     sticker = os.environ.get(f'{event.upper()}_STICKER_ID', '').strip()
     if not sticker:
@@ -82,9 +89,10 @@ def premium_id(emoji):
     # confirmation. Other packs' ✅ entries can render as a blue badge.
     if emoji.replace('\ufe0f', '') == '✅':
         return _PACK_ICONS.get('READY')
-    # One supplied pack labels a coin as 📞. Use a recognizable phone instead.
+    # One supplied pack labels a coin as 📞. Select a real phone from the
+    # phone action's sticker set instead of using that unrelated sticker.
     if emoji.replace('\ufe0f', '') == '📞':
-        return None
+        return _PACK_ICONS.get('CONTACT')
     return _PACK_EMOJIS.get(emoji.replace('\ufe0f', ''))
 
 
@@ -121,7 +129,8 @@ async def load_emoji_packs(application):
         'INCOMPLETE': ('📷',), 'OTHERPARK': ('🚕', '🚗'),
         'DELETE': ('🗑',),
         'BRAND': ('🎨', '🚗'),
-        'LOCATION': ('📍', '🗺', '🏢'),
+        'CONTACT': ('📱', '☎'), 'LOCATION': ('📍', '🗺', '🏢'),
+        'APPLICATION': ('📝', '📄'), 'DOCUMENT': ('📄', '🪪'),
         'SPECTRE': ('⚡',), 'REGION': ('🔄', '🔁', '🗺'),
     }
     # A sticker's own Unicode equivalent is the only safe match for message
@@ -148,6 +157,9 @@ async def load_emoji_packs(application):
         'OTHERPARK': ('statuswb', 'FinanceEmoji', 'IslomjonAnimeEmoji'),
         'DELETE': ('statuswb', 'ApplicationEmoji'),
         'BRAND': ('FinanceEmoji', 'IslomjonAnimeEmoji'),
+        'CONTACT': ('IslomjonAnimeEmoji', 'NewsEmoji'),
+        'APPLICATION': ('ApplicationEmoji', 'IslomjonAnimeEmoji', 'NewsEmoji'),
+        'DOCUMENT': ('ApplicationEmoji', 'IslomjonAnimeEmoji', 'NewsEmoji'),
         'LOCATION': ('IslomjonAnimeEmoji', 'NewsEmoji', 'ApplicationEmoji'),
         'SPECTRE': ('FinanceEmoji', 'TONEmoji'),
         'REGION': ('IslomjonAnimeEmoji', 'ApplicationEmoji', 'NewsEmoji'),

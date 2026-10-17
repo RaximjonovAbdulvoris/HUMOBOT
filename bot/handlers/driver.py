@@ -24,7 +24,7 @@ from bot.config import template_path
 from bot.document_ocr import prepare_document_summary, SOURCES, enabled
 from bot.background_ocr import PENDING_TEXT, schedule_ocr
 from bot.application_ids import application_code
-from bot.presentation import menu_button, send_brand_sticker, send_warning_voice, with_keyboard_fallback
+from bot.presentation import contact_button, menu_button, premium_markup, send_brand_sticker, send_warning_voice, with_keyboard_fallback
 from bot.counter import next_index
 from bot.handlers.operator import build_operator_keyboard, register_application
 from bot.handlers.start import MENU_DRIVER, main_keyboard, require_region, cancel
@@ -177,9 +177,9 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["_application_kind"] = "driver"
     context.user_data["_application_region"] = region
     await update.effective_message.reply_text(
-        f"📝 *{region_name(region)} — haydovchilik arizasi*\n\n"
-        "Iltimos, *ism va familiyangizni* yozing:",
-        parse_mode="Markdown",
+        f"{premium_markup('APPLICATION', '📝')} <b>{region_name(region)} — haydovchilik arizasi</b>\n\n"
+        "Iltimos, <b>ism va familiyangizni</b> yozing:",
+        parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )
     return NAME
@@ -195,7 +195,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return NAME
     context.user_data["name"] = name
     kb = ReplyKeyboardMarkup(
-        [[KeyboardButton("📞 Raqamni jo'natish", request_contact=True)]],
+        [[contact_button()]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
