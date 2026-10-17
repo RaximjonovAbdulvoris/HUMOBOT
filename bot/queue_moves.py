@@ -2,6 +2,7 @@
 from copy import deepcopy
 from html import escape
 import logging
+import os
 import re
 
 from bot.route_settings import destination
@@ -96,8 +97,12 @@ async def move_to_review(context, key, record, action):
         return success, 'Asl xabarlarni o‘chirish tugamadi. Bot huquqlarini tekshirib, yana bosing.'
 
     route_key = 'INCOMPLETE_GROUP' if action == 'incomplete' else 'OTHER_PARK_GROUP'
+    # Once separate region routes are enabled, a missing city destination
+    # must not silently send a driver's documents to the shared queue.
+    regional_queue = destination(f"{record.get('region', '').upper()}_{route_key}")
+    shared_queue = '' if os.environ.get('SEPARATE_REGION_GROUPS') == '1' else destination(route_key)
     queue = (record.get('queue_destinations', {}).get(action)
-             or destination(f"{record.get('region', '').upper()}_{route_key}") or destination(route_key))
+             or regional_queue or shared_queue)
     if not re.fullmatch(r'-[1-9][0-9]*', str(queue)):
         return False, f'«{label}» guruhi sozlanmagan. {route_key} ga guruh ID sini kiriting.'
     if str(queue) == str(record['group_chat_id']):
