@@ -56,6 +56,6 @@ async def send_archive(bot, record, chat_id, reply_to_message_id):
         raise ValueError('ZIP hajmi Telegram chegarasidan oshgan.')
     archive.seek(0)
     code = re.sub(r'[^A-Za-z0-9_-]', '', record.get('code') or 'ariza')[:40]
-    await bot.send_document(chat_id=chat_id, document=InputFile(archive, filename=f'{code}_hujjatlar.zip'),
+    return await bot.send_document(chat_id=chat_id, document=InputFile(archive, filename=f'{code}_hujjatlar.zip'),
                             reply_to_message_id=reply_to_message_id,
                             caption=f'{code} · Hujjatlar ZIP arxivi')
