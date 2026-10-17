@@ -141,6 +141,28 @@ def unanimous(readings):
     return next(iter(items)) if len(items) == 1 and sum(bool(x) for x in readings) >= 3 else None
 
 
+def refine_registration(engine, image):
+    """Confirm the upper-right certificate series across distinct image views.
+
+    Holograms can make a final digit look plausible but different. Any
+    disagreement is left empty instead of quietly choosing a majority.
+    """
+    import numpy as np
+    crop = image.crop((int(image.width * .55), 0, image.width,
+                       int(image.height * .40)))
+    contrast = ImageOps.autocontrast(crop)
+    views = (ImageOps.invert(crop), crop, contrast,
+             contrast.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=2)))
+    readings = []
+    for view in views:
+        rows, _ = engine(np.array(view)[:, :, ::-1].copy())
+        matches = {normalize({'vehicle_registration': match[1]})['vehicle_registration']
+                   for _, text, confidence in rows or [] if confidence >= .90
+                   for match in [re.fullmatch(SERIAL, text.strip().upper())] if match}
+        readings.append(next(iter(matches)) if len(matches) == 1 else None)
+    return unanimous(readings)
+
+
 def refine_birth(engine, image, word):
     import numpy as np
     boundary = int(word.left + .7 * word.width)
@@ -261,6 +283,11 @@ def read_document(engine, raw, source, emit=None):
                     values[key] = None  # Never silently prefer conflicting readings.
                 elif not values.get(key):
                     values[key] = alternate[key]
+    if source.startswith('tech_'):
+        # A full-frame OCR confidence score alone is insufficient on holograms.
+        # This also excludes serial-looking text from the vehicle data rows.
+        confirmed = refine_registration(engine, image)
+        values['vehicle_registration'] = confirmed if confirmed == values.get('vehicle_registration') else None
     return guard_identifiers(values)[0]
 
 
@@ -273,20 +300,14 @@ def main():
         print(json.dumps({'ready': True}), flush=True)
         return
     payload = json.loads(sys.stdin.buffer.read(45_000_000))
-    registration_found = False
     for item in payload:
         source = item['source']
-        if source == 'tech_front' and registration_found:
-            print(json.dumps({'source': source, 'values': {}, 'skipped': True, 'final': True}), flush=True)
-            continue
         try:
             raw = base64.b64decode(item['image'], validate=True)
             if len(raw) > 5_000_000:
                 raise ValueError('Image too large')
             values = read_document(engine, raw, source, emit=lambda partial: print(
                 json.dumps({'source': source, 'values': partial, 'final': False}), flush=True))
-            if source == 'tech_back' and values.get('vehicle_registration'):
-                registration_found = True
             print(json.dumps({'source': source, 'values': values, 'final': True}), flush=True)
         except Exception as error:
             print(json.dumps({'source': source, 'error': type(error).__name__}), flush=True)
