@@ -102,32 +102,56 @@ def clean_place(text):
 
 
 def licence_identity(words):
-    # Numbered field 2 anchors the given name. Require one surname directly above,
-    # aligned with it; do not pick the decorative region list at the card's right.
-    anchors = [w for w in words if w.confidence >= 95 and re.fullmatch(r'2[.)]?', w.text)]
-    if len(anchors) != 1:
-        combined = [w for w in words if w.confidence >= 95 and re.match(r'^2[.)]?\s*[^\W\d_]', w.text)]
-        if len(combined) != 1:
-            return None
-        given = combined[0]
-        name = clean_name(re.sub(r'^2[.)]?\s*', '', given.text))
-    else:
-        anchor = anchors[0]
-        candidates = [w for w in words if w.confidence >= 95 and clean_name(w.text)
-            and 0 < w.left - anchor.left - anchor.width < anchor.height * 2
-            and abs(w.top - anchor.top) < anchor.height * .5]
-        if len(candidates) != 1:
-            return None
-        given = candidates[0]
-        name = clean_name(given.text)
-    surname_text = lambda w: clean_name(re.sub(r'^1[.)]?\s*', '', w.text))
-    surnames = [w for w in words if w.confidence >= 95 and surname_text(w)
-        and .6 * given.height < given.top - w.top < 1.8 * given.height
-        and abs(w.left - given.left) < given.height * .5]
-    if name and len(surnames) == 1:
-        surname = surname_text(surnames[0])
-        return (surname, name) if clean_name(surname + ' ' + name) else None
-    return None
+    # Identify the printed 1 and 2 rows; field 2 may continue onto a second
+    # line (patronymic). Require the 3 row as a lower boundary when available.
+    def numbered(rank):
+        result = []
+        for word in words:
+            if word.confidence < 85:
+                continue
+            match = re.fullmatch(rf'{rank}[.)]?\s*(.*)', word.text.strip())
+            if match:
+                result.append((word, clean_name(match[1]) if match[1] else None))
+        return result
+
+    ones, twos, threes = numbered(1), numbered(2), numbered(3)
+    if len(ones) != 1 or len(twos) != 1:
+        return None
+    first, first_attached = ones[0]
+    second, second_attached = twos[0]
+    if not 0 < second.top - first.top < max(first.height, second.height) * 2.4:
+        return None
+    if abs(first.left - second.left) > max(first.height, second.height) * 1.4:
+        return None
+
+    def row_value(anchor, attached):
+        if attached:
+            return anchor, attached
+        choices = [(word, clean_name(word.text)) for word in words
+                   if word.confidence >= 90 and word is not anchor
+                   and 0 <= word.left - anchor.left - anchor.width < anchor.height * 2.5
+                   and abs(word.top + word.height / 2 - anchor.top - anchor.height / 2)
+                   < max(word.height, anchor.height) * .55]
+        choices = [(word, value) for word, value in choices if value]
+        return choices[0] if len(choices) == 1 else (None, None)
+
+    surname_word, surname = row_value(first, first_attached)
+    given_word, given = row_value(second, second_attached)
+    if not surname or not given:
+        return None
+    boundary = min((w.top for w, _ in threes if w.top > second.top), default=second.top + second.height * 3)
+    continued = [(w, clean_name(w.text)) for w in words if w.confidence >= 85
+                 and w is not given_word and w is not surname_word
+                 and given_word.top + .65 * given_word.height < w.top < boundary
+                 and abs(w.left - given_word.left) < max(w.height, given_word.height) * .7]
+    continued = [(w, value) for w, value in continued if value]
+    if len(continued) > 1:
+        return None
+    name = given + (' ' + continued[0][1] if continued else '')
+    # The recognizer sometimes joins the printed patronymic suffix to the
+    # preceding name even though the licence shows a word gap.
+    name = re.sub(r"(?<=[^\W\d_])(?=O['‘’ʼ`]G['‘’ʼ`]LI$)", ' ', name, flags=re.I)
+    return (surname, name) if clean_name(surname + ' ' + name) else None
 
 
 def licence_name(words):
@@ -247,6 +271,16 @@ def read_document(engine, raw, source, emit=None):
         identity = licence_identity(words)
         values['surname'], values['given_name'] = identity or (None, None)
         values['full_name'] = ' '.join(identity) if identity else None
+        if not identity:
+            normal, _ = engine(np.array(image)[:, :, ::-1].copy())
+            normal_words = []
+            for box, text, confidence in normal or []:
+                left, top = min(p[0] for p in box), min(p[1] for p in box)
+                normal_words.append(Word(text, confidence * 100, left, top,
+                    max(p[0] for p in box) - left, max(p[1] for p in box) - top))
+            identity = licence_identity(normal_words)
+            values['surname'], values['given_name'] = identity or (None, None)
+            values['full_name'] = ' '.join(identity) if identity else None
         if emit:
             emit(guard_identifiers(values)[0])
         anchors = [w for w in words if w.confidence >= 75 and re.match(r'^3[.)]', w.text)]
