@@ -134,12 +134,15 @@ def _forget_application(context, key, record):
                     context.bot_data.get("pending_prompts", {}).pop(entry_key, None)
 
 
-async def _delete_operator_application(context, key, record) -> bool:
+async def _delete_operator_application(context, key, record, *, delete_downloads=False) -> bool:
     """Delete only recorded source messages; keep controls until photos are gone."""
     completed = record.setdefault("deleted_source_ids", [])
     ids = list(dict.fromkeys(record.get("photo_msg_ids", [])))
     ids = [mid for mid in ids if mid != record["kb_msg_id"]]
+    if delete_downloads:
+        ids.extend(mid for mid in record.get('zip_message_ids', []) if isinstance(mid, int))
     ids.append(record["kb_msg_id"])
+    ids = list(dict.fromkeys(ids))
     for message_id in ids:
         if message_id in completed:
             continue
@@ -703,7 +706,11 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == 'download':
         from bot.application_download import send_archive
         try:
-            await send_archive(context.bot, resolved[1], chat.id, query.message.message_id)
+            sent = await send_archive(context.bot, resolved[1], chat.id, query.message.message_id)
+            if sent is not None and isinstance(getattr(sent, 'message_id', None), int):
+                resolved[1].setdefault('zip_message_ids', []).append(sent.message_id)
+                from bot.queue_moves import checkpoint
+                await checkpoint(context)
         except ValueError as error:
             await query.message.reply_text(str(error))
         except Exception as error:
@@ -765,7 +772,7 @@ async def _on_operator_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not await checkpoint(context):
             await query.message.reply_text("Arxiv nusxasi yaratildi, lekin holatni saqlab bo‘lmadi. Asl ariza o‘chirilmadi.")
             return
-        if not await _delete_operator_application(context, key, record):
+        if not await _delete_operator_application(context, key, record, delete_downloads=True):
             await query.message.reply_text(
                 "✅ Arxiv nusxasi tayyor. Ayrim asl xabarlarni o‘chirib bo‘lmadi. "
                 "Bot ruxsatlarini tekshirib «Tayyor»ni qayta bosing."
