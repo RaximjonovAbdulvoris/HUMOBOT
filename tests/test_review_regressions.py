@@ -7,9 +7,26 @@ from test_regions import context, update
 from test_operator_safety import FakeBot, FakeMessage, _update
 from bot.handlers import brand, driver, operator
 from bot.main import build_application_conversation
+from bot.template_cards import CARDS
 
 
 class ReviewRegressionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_passport_front_advances_directly_to_license(self):
+        ctx = context('tashkent')
+        msg = update()
+        msg.message.photo = [N(file_id='passport-front')]
+        with patch('bot.handlers.driver._send_prompt', AsyncMock()) as prompt:
+            state = await driver.get_passport_front(msg, ctx)
+        self.assertEqual(state, driver.LICENSE_FRONT)
+        self.assertEqual(ctx.user_data['passport_front'], 'passport-front')
+        self.assertNotIn('passport_back', ctx.user_data)
+        self.assertEqual(prompt.await_args.args[3], 'license_front')
+
+    def test_instruction_cards_have_eleven_consecutive_steps(self):
+        self.assertNotIn('passport_back', CARDS)
+        self.assertEqual([step for step, *_ in CARDS.values()],
+                         [f'{number:02d}' for number in range(1, 12)])
+
     async def test_wrong_media_keeps_year_step(self):
         ctx = context('tashkent')
         handler = brand._text_state(brand.brand_get_model, brand.BRAND_MODEL)[0]

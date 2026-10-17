@@ -255,7 +255,7 @@ async def phone_wrong(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def warn_docs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await _send_prompt(
         update, context,
-        "📄 1/12 — *Passport (old tarafi)* rasmini jo'nating:",
+        "📄 1/11 — *Passport (old tarafi)* rasmini jo'nating:",
         "passport_front",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -296,37 +296,38 @@ def _make_photo_step(field: str, next_text: str,
 
 get_passport_front, _wrong_pf = _make_photo_step(
     "passport_front",
-    "📄 2/12 — *Passport (orqa tarafi)* rasmini jo'nating:",
-    "passport_back", PASSPORT_FRONT, PASSPORT_BACK,
+    "🪪 2/11 — *Haydovchilik guvohnomasi (old tarafi)* rasmini jo'nating:",
+    "license_front", PASSPORT_FRONT, LICENSE_FRONT,
 )
+# Keep the old state so applications already waiting for the back photo can finish.
 get_passport_back, _wrong_pb = _make_photo_step(
     "passport_back",
-    "🪪 3/12 — *Haydovchilik guvohnomasi (old tarafi)* rasmini jo'nating:",
+    "🪪 2/11 — *Haydovchilik guvohnomasi (old tarafi)* rasmini jo'nating:",
     "license_front", PASSPORT_BACK, LICENSE_FRONT,
 )
 get_license_front, _wrong_lf = _make_photo_step(
     "license_front",
-    "🪪 4/12 — *Haydovchilik guvohnomasi (orqa tarafi)* rasmini jo'nating:",
+    "🪪 3/11 — *Haydovchilik guvohnomasi (orqa tarafi)* rasmini jo'nating:",
     "license_back", LICENSE_FRONT, LICENSE_BACK,
 )
 get_license_back, _wrong_lb = _make_photo_step(
     "license_back",
-    "🚘 5/12 — *Texnik passport (old tarafi)* rasmini jo'nating:",
+    "🚘 4/11 — *Texnik passport (old tarafi)* rasmini jo'nating:",
     "tech_front", LICENSE_BACK, TECH_FRONT,
 )
 get_tech_front, _wrong_tf = _make_photo_step(
     "tech_front",
-    "🚘 6/12 — *Texnik passport (orqa tarafi)* rasmini jo'nating:",
+    "🚘 5/11 — *Texnik passport (orqa tarafi)* rasmini jo'nating:",
     "tech_back", TECH_FRONT, TECH_BACK,
 )
 get_tech_back, _wrong_tb = _make_photo_step(
     "tech_back",
-    "🤳 7/12 — *Selfie* rasmingizni jo'nating:",
+    "🤳 6/11 — *Selfie* rasmingizni jo'nating:",
     "selfie", TECH_BACK, SELFIE,
 )
 get_selfie, _wrong_se = _make_photo_step(
     "selfie",
-    "📜 8/12 — *Litsenziya* rasmini jo'nating:",
+    "📜 7/11 — *Litsenziya* rasmini jo'nating:",
     "litsenziya", SELFIE, LITSENZIYA,
 )
 
@@ -345,7 +346,7 @@ async def _send_car_photo_prompt(update: Update, context: ContextTypes.DEFAULT_T
     """Send 4 car template images as a media group with instruction caption on first image."""
     car_names = ["car_front", "car_back", "car_left", "car_right"]
     instruction = (
-        "🚗 *9-12/12 — Mashina rasmlari*\n\n"
+        "🚗 *8-11/11 — Mashina rasmlari*\n\n"
         "Mashinangizning *4 ta tomonidan* rasmga olib jo'nating:\n"
         "1️⃣ Old • 2️⃣ Orqa • 3️⃣ Chap • 4️⃣ O'ng\n\n"
         "Hammasini birin-ketin (4 ta rasm) jo'natishingiz kerak."
