@@ -33,6 +33,19 @@ class QueueMoveTests(unittest.IsolatedAsyncioTestCase):
     def query(self,action,msg,chat):
         return _update(f'op:{action}:9',msg,chat_id=chat)
 
+    async def test_separate_mode_never_falls_back_to_shared_review_group(self):
+        from bot.queue_moves import move_to_review
+        bot, ctx, key, _ = self.case()
+        record = ctx.bot_data['applications'][key]
+        def only_shared(route):
+            return '-2001' if route == 'INCOMPLETE_GROUP' else ''
+        with patch.dict(os.environ, {'SEPARATE_REGION_GROUPS': '1'}), \
+             patch('bot.queue_moves.destination', side_effect=only_shared):
+            success, reason = await move_to_review(ctx, key, record, 'incomplete')
+        self.assertFalse(success)
+        self.assertIn('sozlanmagan', reason)
+        self.assertFalse(bot.groups)
+
     async def move(self,action='incomplete'):
         bot,ctx,key,msg=self.case()
         await operator.on_operator_button(self.query(action,msg,100),ctx)
