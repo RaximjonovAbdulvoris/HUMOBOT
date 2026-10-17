@@ -204,7 +204,7 @@ def read_document(engine, raw, source, emit=None):
         if emit:
             emit(guard_identifiers(values)[0])
         anchors = [w for w in words if w.confidence >= 75 and re.match(r'^3[.)]', w.text)]
-        if len(anchors) == 1:
+        if len(anchors) == 1 and (not values['birth_place'] or not values['birth_date']):
             refined = refine_birth(engine, image, anchors[0])
             for key, value in refined.items():
                 # A narrow crop can read only part of a place name. The intact,

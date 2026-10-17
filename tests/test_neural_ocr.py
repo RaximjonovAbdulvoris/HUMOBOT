@@ -89,6 +89,21 @@ class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('TELEGRAM_BOT_TOKEN', spawn.call_args.kwargs['env'])
 
 class LicenceIdentityTests(unittest.TestCase):
+    def test_complete_field_three_does_not_need_a_fragile_crop(self):
+        from bot.neural_ocr_worker import read_document
+        from PIL import Image
+        from io import BytesIO
+        image = Image.new('RGB', (960, 1280), 'white')
+        buffer = BytesIO()
+        image.save(buffer, 'PNG')
+        box = [[300, 500], [670, 500], [670, 535], [300, 535]]
+        detected = ([(box, '3. TEST CITY 01.02.1990', .99)], None)
+        with patch('bot.neural_ocr_worker.refine_birth', side_effect=AssertionError('unneeded crop')):
+            values = read_document(lambda *args, **kwargs: detected,
+                                   buffer.getvalue(), 'license_front')
+        self.assertEqual(values['birth_place'], 'TEST CITY')
+        self.assertEqual(values['birth_date'], '01.02.1990')
+
     def test_name_requires_field_two_and_aligned_surname(self):
         from bot.neural_ocr_worker import licence_name
         words = [row('EXAMPLE', x=320, y=100, height=28),
