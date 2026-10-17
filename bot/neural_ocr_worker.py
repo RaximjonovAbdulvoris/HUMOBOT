@@ -165,15 +165,24 @@ def unanimous(readings):
     return next(iter(items)) if len(items) == 1 and sum(bool(x) for x in readings) >= 3 else None
 
 
-def refine_registration(engine, image):
-    """Confirm the upper-right certificate series across distinct image views.
+def refine_registration(engine, image, words):
+    """Confirm the certificate series around its detected text box.
 
     Holograms can make a final digit look plausible but different. Any
     disagreement is left empty instead of quietly choosing a majority.
     """
     import numpy as np
-    crop = image.crop((int(image.width * .55), 0, image.width,
-                       int(image.height * .40)))
+    candidates = [word for word in words if word.confidence >= 90
+                  and re.fullmatch(SERIAL, word.text.strip().upper())
+                  and word.left >= .60 * image.width and word.top < .75 * image.height]
+    if len(candidates) != 1:
+        return None
+    word = candidates[0]
+    margin = max(12, int(word.height * 2))
+    crop = image.crop((max(0, int(word.left) - margin),
+                       max(0, int(word.top) - margin),
+                       min(image.width, int(word.left + word.width) + margin * 2),
+                       min(image.height, int(word.top + word.height) + margin * 2)))
     contrast = ImageOps.autocontrast(crop)
     views = (ImageOps.invert(crop), crop, contrast,
              contrast.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=2)))
@@ -320,7 +329,7 @@ def read_document(engine, raw, source, emit=None):
     if source.startswith('tech_'):
         # A full-frame OCR confidence score alone is insufficient on holograms.
         # This also excludes serial-looking text from the vehicle data rows.
-        confirmed = refine_registration(engine, image)
+        confirmed = refine_registration(engine, image, words)
         values['vehicle_registration'] = confirmed if confirmed == values.get('vehicle_registration') else None
     return guard_identifiers(values)[0]
 
