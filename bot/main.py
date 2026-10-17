@@ -40,6 +40,8 @@ async def intercept_pending_reply(update: Update, context: ContextTypes.DEFAULT_
         return
     pending = context.bot_data.get("pending_user_replies", {})
     user_id = update.effective_user.id
+    logger.info("Private update received: update=%s pending_relay=%s",
+                getattr(update, 'update_id', None), user_id in pending)
     if user_id not in pending:
         return
     text = update.message.text or ""
@@ -48,6 +50,8 @@ async def intercept_pending_reply(update: Update, context: ContextTypes.DEFAULT_
         pending.pop(user_id, None)
         return
     await on_user_reply_message(update, context)
+    logger.info("Private update routed to operator relay: update=%s",
+                getattr(update, 'update_id', None))
     raise ApplicationHandlerStop
 
 

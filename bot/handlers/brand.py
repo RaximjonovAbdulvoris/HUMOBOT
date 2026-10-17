@@ -355,7 +355,11 @@ async def wrong_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def _text_state(handler, state):
     async def tracked(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logger.info("Brand form update: update=%s state=%s",
+                    getattr(update, 'update_id', None), state)
         next_state = await handler(update, context)
+        logger.info("Brand form transition: update=%s from=%s to=%s",
+                    getattr(update, 'update_id', None), state, next_state)
         if next_state != ConversationHandler.END:
             context.user_data["_brand_state"] = next_state
         return next_state
