@@ -30,6 +30,20 @@ class OperatorActionTests(unittest.IsolatedAsyncioTestCase):
             await operator.on_operator_button(_update('op:download:9',msg),ctx)
         send.assert_awaited_once_with(bot, ctx.bot_data['applications'][key], -1001, 20)
 
+    async def test_zip_deleted_after_ready_but_not_during_review_move(self):
+        with patch('bot.application_download.send_archive', new_callable=AsyncMock, return_value=N(message_id=88)):
+            bot, ctx, key, msg = self.setup_case()
+            await operator.on_operator_button(_update('op:download:9', msg), ctx)
+            self.assertEqual(ctx.bot_data['applications'][key]['zip_message_ids'], [88])
+            await operator.on_operator_button(_update('op:incomplete:9', msg), ctx)
+            self.assertNotIn(88, [entry['message_id'] for entry in bot.deletes])
+
+            bot, ctx, key, msg = self.setup_case()
+            await operator.on_operator_button(_update('op:download:9', msg), ctx)
+            with patch('bot.regions.archive_group', return_value='-3001'), patch('bot.handlers.operator.archive_group', return_value='-3001'):
+                await operator.on_operator_button(_update('op:ready:9', msg), ctx)
+            self.assertIn({'chat_id': -1001, 'message_id': 88}, bot.deletes)
+
     async def test_notice_follows_move_and_old_buttons_cannot_duplicate_it(self):
         for action in ('incomplete','otherpark'):
             bot,ctx,key,msg=self.setup_case()
