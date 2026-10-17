@@ -81,6 +81,7 @@ def is_review_record(record: dict) -> bool:
 
 async def refresh_driver_keyboards(application) -> None:
     """Upgrade stored driver controls on deployment; never touch plain forms."""
+    from bot.background_ocr import control_lock
     seen = set()
     for store in ("applications", "app_messages"):
         for record in list(application.bot_data.get(store, {}).values()):
@@ -94,19 +95,22 @@ async def refresh_driver_keyboards(application) -> None:
             if key in seen:
                 continue
             seen.add(key)
-            try:
-                await with_keyboard_fallback(application.bot.edit_message_reply_markup,
-                    chat_id=chat_id, message_id=message_id,
-                    reply_markup=build_operator_keyboard(
-                        user_id, application.bot_data.get("progress_state", {}).get(key, False),
-                        review=is_review_record(record)
-                    ),
-                )
-            except BadRequest as error:
-                if "message is not modified" not in str(error).lower():
+            async with control_lock(chat_id, message_id):
+                if record.get('deleted_source_ids') or record.get('_transfer') or _record_for_key(application, key) is None:
+                    continue
+                try:
+                    await with_keyboard_fallback(application.bot.edit_message_reply_markup,
+                        chat_id=chat_id, message_id=message_id,
+                        reply_markup=build_operator_keyboard(
+                            user_id, application.bot_data.get("progress_state", {}).get(key, False),
+                            review=is_review_record(record)
+                        ),
+                    )
+                except BadRequest as error:
+                    if "message is not modified" not in str(error).lower():
+                        logger.warning("Driver controls could not be refreshed for %s", key)
+                except Exception:
                     logger.warning("Driver controls could not be refreshed for %s", key)
-            except Exception:
-                logger.warning("Driver controls could not be refreshed for %s", key)
 
 
 def _forget_application(context, key, record):
