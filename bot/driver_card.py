@@ -1,11 +1,13 @@
 """Operator-facing driver card, with copyable fields in a fixed order."""
 from html import escape
+import re
 
 from bot.document_ocr import review_warnings
 
 
 def details(result, phone='', plate=''):
     values = result.get('values') or {}
+    phone_digits = re.sub(r'\D', '', str(phone or ''))
     missing = '⚠️ Aniqlanmadi — tekshiring'
 
     def value(field):
@@ -21,7 +23,7 @@ def details(result, phone='', plate=''):
         f"Familiya: {value('surname')}",
         f"Ism: {value('given_name')}",
         f"Tug‘ilgan sana: {value('birth_date')}",
-        f"Telefon raqami: {entered(phone)}",
+        f"Telefon raqami: {entered(phone_digits)}",
         f"PINFL: {value('pinfl')}",
         f"Tug‘ilgan joy: {value('birth_place')}",
         f"Prava raqami: {value('license_number')}",
