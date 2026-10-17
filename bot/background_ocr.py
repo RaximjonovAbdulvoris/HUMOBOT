@@ -4,7 +4,8 @@ import logging
 import time
 from weakref import WeakKeyDictionary
 
-from bot.document_ocr import SOURCES, extract_documents, format_summary, enabled, review_warnings
+from bot.document_ocr import SOURCES, extract_documents, enabled, review_warnings
+from bot.driver_card import details as driver_details
 
 logger = logging.getLogger(__name__)
 _LOCKS = WeakKeyDictionary()
@@ -151,7 +152,9 @@ async def _enrich(application, code, applicant_id):
                     continue
                 if record.get('deleted_source_ids') or record.get('archive_state', {}).get('kb'):
                     return
-                text = record['ocr_prefix'] + format_summary(result) + record['ocr_suffix']
+                card_data = record.get('ocr_card_data') or {}
+                text = (record['ocr_prefix'] + driver_details(result, card_data.get('phone'),
+                        card_data.get('plate')) + record['ocr_suffix'])
                 progress = application.bot_data.get('progress_state', {}).get(key, False)
                 try:
                     await with_keyboard_fallback(application.bot.edit_message_text,
