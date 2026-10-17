@@ -30,6 +30,18 @@ async def send_brand_sticker(message, event):
         logger.warning('Optional %s sticker could not be sent', event)
 
 
+async def send_warning_voice(message):
+    """Send the owner's recorded document instructions after the written warning."""
+    voice_id = os.environ.get('DRIVER_WARNING_VOICE_FILE_ID', '').strip()
+    if not voice_id:
+        return
+    try:
+        await message.reply_voice(voice=voice_id)
+    except Exception:
+        # An optional recording must not prevent a driver from continuing.
+        logger.warning('Optional driver warning voice could not be sent')
+
+
 async def with_keyboard_fallback(call, **kwargs):
     """A rejected premium icon must not prevent sending operator controls."""
     from telegram import InlineKeyboardMarkup

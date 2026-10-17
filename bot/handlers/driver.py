@@ -24,7 +24,7 @@ from bot.config import template_path
 from bot.document_ocr import prepare_document_summary, SOURCES, enabled
 from bot.background_ocr import PENDING_TEXT, schedule_ocr
 from bot.application_ids import application_code
-from bot.presentation import send_brand_sticker, with_keyboard_fallback
+from bot.presentation import send_brand_sticker, send_warning_voice, with_keyboard_fallback
 from bot.counter import next_index
 from bot.handlers.operator import build_operator_keyboard, register_application
 from bot.handlers.start import MENU_DRIVER, main_keyboard, require_region, cancel
@@ -239,6 +239,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         parse_mode="Markdown",
         reply_markup=CONTINUE_KB,
     )
+    await send_warning_voice(update.message)
     return WARN_DOCS
 
 

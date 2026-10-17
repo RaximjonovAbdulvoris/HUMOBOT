@@ -118,6 +118,12 @@ must have Premium (or the bot must have an eligible purchased username). Without
 IDs, the interface uses colored Telegram-native buttons and standard emoji.
 A sticker send failure does not interrupt a form.
 
+To send a recorded voice instruction immediately after the driver document
+warning, send the voice note to the test bot in a private chat, reply to it with
+`/asset_id`, and save the returned ID as `DRIVER_WARNING_VOICE_FILE_ID` in
+`.env.test`. Restart `humobot-test` to load the new setting. The written warning
+and Continue button remain available if the optional voice cannot be sent.
+
 Vehicle-certificate OCR normalizes spacing/separators and Cyrillic lookalikes
 before comparing front/back readings, while still flagging conflicting values.
 Provider HTTP status is logged without document text or credentials. Vision

@@ -6,7 +6,12 @@ async def asset_id(update, context):
     message = update.effective_message
     target = message.reply_to_message
     if not target:
-        await message.reply_text('Sticker yoki premium emoji xabariga Reply qilib /asset_id yuboring.')
+        await message.reply_text('Voice, sticker yoki premium emoji xabariga Reply qilib /asset_id yuboring.')
+        return
+    if target.voice:
+        await message.reply_text(
+            f'Voice ID:\n<code>{escape(target.voice.file_id)}</code>', parse_mode='HTML'
+        )
         return
     if target.sticker:
         await message.reply_text(
@@ -17,4 +22,4 @@ async def asset_id(update, context):
     if ids:
         await message.reply_text('Emoji ID:\n' + '\n'.join(f'<code>{escape(i)}</code>' for i in ids), parse_mode='HTML')
     else:
-        await message.reply_text('Bu xabarda sticker yoki premium emoji topilmadi.')
+        await message.reply_text('Bu xabarda voice, sticker yoki premium emoji topilmadi.')
