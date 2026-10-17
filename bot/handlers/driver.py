@@ -23,6 +23,7 @@ from telegram.ext import (
 from bot.config import template_path
 from bot.document_ocr import prepare_document_summary, SOURCES, enabled
 from bot.background_ocr import PENDING_TEXT, schedule_ocr
+from bot.driver_card import details as driver_details
 from bot.application_ids import application_code
 from bot.presentation import contact_button, menu_button, premium_markup, send_brand_sticker, send_warning_voice, with_keyboard_fallback
 from bot.counter import next_index
@@ -178,11 +179,12 @@ async def check_membership(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["_application_region"] = region
     await update.effective_message.reply_text(
         f"{premium_markup('APPLICATION', '📝')} <b>{region_name(region)} — haydovchilik arizasi</b>\n\n"
-        "Iltimos, <b>ism va familiyangizni</b> yozing:",
+        "Ism va familiyangiz pravangizdan avtomatik o‘qiladi.\n"
+        "Iltimos, <b>telefon raqamingizni</b> yuboring:",
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=ReplyKeyboardMarkup([[contact_button()]], resize_keyboard=True, one_time_keyboard=True),
     )
-    return NAME
+    return PHONE
 
 
 # -------------------- 1. name --------------------
@@ -602,18 +604,15 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
     )
 
     code = application_code(d)
-    document_summary = PENDING_TEXT if enabled() else "AI o‘chirilgan. Hujjatlarni qo‘lda tekshiring."
+    initial = {'status': 'pending', 'values': {}}
 
     prefix = (
         f"<b>WB HUMO · HAYDOVCHI ARIZASI</b>\n"
         f"Ariza: <code>{code}</code> · {h(region_name(region))}\n\n"
-        f"<b>Arizachi</b>\n{user_link_html}\n"
-        f"F.I.Sh.: {h(str(d.get('name', '-'))[:160])}\n"
-        f"Telefon: <code>{h(str(d.get('phone', '-'))[:40])}</code>\n"
-        f"Davlat raqami: <code>{h(str(d.get('car_plate', '-'))[:30])}</code>\n\n"
+        f"<b>Arizachi</b>\n{user_link_html}\n\n"
     )
     suffix = "\n\n<b>Operator boshqaruvi</b>\nQuyidagi amallardan birini tanlang."
-    details = prefix + document_summary + suffix
+    details = prefix + driver_details(initial, d.get('phone'), d.get('car_plate')) + suffix
     caption_main = f"📎 <b>{code}</b> · Hujjatlar va avtomobil · 1/2"
     caption_selfie = f"📎 <b>{code}</b> · Selfie va litsenziya · 2/2"
 
@@ -727,6 +726,7 @@ async def _send_to_driver_group(context: ContextTypes.DEFAULT_TYPE):
         if enabled():
             record = context.bot_data['applications'][record_key]
             record.update(ocr_status='pending', ocr_prefix=prefix, ocr_suffix=suffix,
+                          ocr_card_data={'phone': d.get('phone'), 'plate': d.get('car_plate')},
                           ocr_input={**{source: d[source] for source in SOURCES if d.get(source)},
                                      'car_plate': d.get('car_plate', '')})
             application = getattr(context, 'application', None)
