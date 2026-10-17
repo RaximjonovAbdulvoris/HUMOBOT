@@ -143,13 +143,19 @@ async def post_init(application) -> None:
         logger.warning("Instruction cards unavailable; text prompts will be used.")
     from bot.presentation import load_emoji_packs
     await load_emoji_packs(application)
-    await remove_legacy_brand_keyboards(application)
-    await refresh_driver_keyboards(application)
     await warmup_templates(application)
+    # Telegram may hold thousands of old applications. Updating every old
+    # keyboard before polling makes the bot unavailable for minutes at boot.
+    application.job_queue.run_once(refresh_operator_controls, when=2)
     from bot.background_ocr import resume_pending
     application.job_queue.run_repeating(resume_pending, interval=15, first=0)
     from bot.brand_sheets import flush as flush_brand_sheets
     application.job_queue.run_repeating(flush_brand_sheets, interval=30, first=5)
+
+
+async def refresh_operator_controls(context) -> None:
+    await remove_legacy_brand_keyboards(context.application)
+    await refresh_driver_keyboards(context.application)
 
 
 def main() -> None:
