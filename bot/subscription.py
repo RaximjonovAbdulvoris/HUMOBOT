@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 REQUIRED_CHANNEL = os.environ.get("SUBSCRIPTION_CHANNEL_ID", os.environ.get("CHANNEL", "@WB_HUMO_TAXI")).strip()
 if not re.fullmatch(r"(?:-[1-9][0-9]*|@[A-Za-z0-9_]+)", REQUIRED_CHANNEL):
     raise ValueError("SUBSCRIPTION_CHANNEL_ID uchun kanal ID yoki @username kiriting, taklif havolasi emas.")
-CHANNEL_URL = "https://t.me/+knRCQZnC9UphNjky"
+CHANNEL_URL = "https://t.me/+p0yshFmkUpU2OGIy"
 NAMANGAN_GROUP = "@wbhumo_namangan"
 NAMANGAN_GROUP_URL = "https://t.me/wbhumo_namangan"
 
