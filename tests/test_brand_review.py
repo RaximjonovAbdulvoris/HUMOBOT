@@ -63,3 +63,34 @@ class BrandReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('Google Sheetsga to‘ldirildi',
                       context.bot.edit_message_text.await_args.kwargs['text'])
         self.assertIsNone(context.bot.edit_message_text.await_args.kwargs['reply_markup'])
+
+    async def test_failed_persistence_does_not_leave_approved_export(self):
+        context, review, update = self.setup_review()
+        with patch.object(brand_review, 'checkpoint', AsyncMock(return_value=False)):
+            await brand_review.on_review(update, context)
+        self.assertEqual(review['status'], 'pending')
+        self.assertNotIn('HM-000001', context.bot_data['brand_sheets_outbox'])
+        context.bot.send_message.assert_not_awaited()
+
+    async def test_export_waits_until_approval_is_saved(self):
+        context, review, update = self.setup_review()
+        from asyncio import Event, create_task
+        saving = Event()
+        resume = Event()
+        async def delayed_checkpoint(context):
+            saving.set()
+            await resume.wait()
+            return True
+        with patch.object(brand_review, 'checkpoint', side_effect=delayed_checkpoint), \
+             patch.object(brand_sheets, 'configuration', return_value=('url', 'secret')), \
+             patch.object(brand_sheets, 'post_export', AsyncMock()) as post:
+            decision = create_task(brand_review.on_review(update, context))
+            await saving.wait()
+            export = create_task(brand_sheets.flush(context))
+            from asyncio import sleep
+            await sleep(0)
+            post.assert_not_awaited()
+            resume.set()
+            await decision
+            await export
+        post.assert_awaited_once()

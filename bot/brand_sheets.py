@@ -91,6 +91,8 @@ async def flush(context):
         config = configuration()
     except ValueError:
         logger.warning('Brand Sheets configuration needs attention')
+        from bot.brand_review import sync_all
+        await sync_all(context)
         return
     if config is None:
         from bot.brand_review import sync_all
@@ -110,17 +112,24 @@ async def flush(context):
                     # Leave them untouched instead of exporting without consent.
                     if payload['kind'] == 'brand' and not item.get('approved'):
                         continue
-                    await post_export(client, *config, payload)
-                    item['status'] = 'sent'
-                    item.pop('payload', None)
-                    item.pop('approved', None)
                     review = context.bot_data.get('brand_reviews', {}).get(code)
-                    if review and review.get('status') == 'approved':
-                        review['status'] = 'exported'
-                    application = getattr(context, 'application', None)
-                    if application is not None and application.persistence is not None:
-                        await application.update_persistence()
-                        await application.persistence.flush()
+                    if payload['kind'] == 'brand' and review:
+                        from bot.background_ocr import control_lock
+                        async with control_lock(review['group_id'], review['message_id'] or 0):
+                            if review['status'] != 'approved' or item.get('status') != 'pending':
+                                continue
+                            await post_export(client, *config, payload)
+                            item['status'] = 'sent'
+                            item.pop('payload', None)
+                            item.pop('approved', None)
+                            review['status'] = 'exported'
+                            await _save(context)
+                    else:
+                        await post_export(client, *config, payload)
+                        item['status'] = 'sent'
+                        item.pop('payload', None)
+                        item.pop('approved', None)
+                        await _save(context)
                 except Exception as error:
                     # The durable item remains pending; retrying the same code
                     # cannot duplicate a row when using the supplied receiver.
@@ -128,3 +137,10 @@ async def flush(context):
                     continue
     from bot.brand_review import sync_all
     await sync_all(context)
+
+
+async def _save(context):
+    application = getattr(context, 'application', None)
+    if application is not None and application.persistence is not None:
+        await application.update_persistence()
+        await application.persistence.flush()

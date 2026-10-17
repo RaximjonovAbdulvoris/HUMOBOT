@@ -2,6 +2,7 @@
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import CallbackQueryHandler
 
 from bot.background_ocr import control_lock
@@ -43,7 +44,8 @@ def status_text(review):
 
 async def sync_status(context, review):
     """The group post is the durable, visible source of the decision."""
-    if not review.get('message_id') or review.get('displayed_status') == review['status']:
+    if (not review.get('message_id') or review.get('group_deleted')
+            or review.get('displayed_status') == review['status']):
         return
     try:
         await context.bot.edit_message_text(
@@ -53,6 +55,12 @@ async def sync_status(context, review):
         )
         review['displayed_status'] = review['status']
         await checkpoint(context)
+    except BadRequest as error:
+        if 'not modified' in str(error).lower():
+            review['displayed_status'] = review['status']
+            await checkpoint(context)
+        else:
+            logger.warning('Brand review post update pending (%s)', type(error).__name__)
     except Exception as error:
         logger.warning('Brand review post update pending (%s)', type(error).__name__)
 
@@ -127,6 +135,8 @@ async def on_review(update, context):
             return
         if action == 'approve':
             from bot.brand_sheets import enqueue
+            outbox = context.bot_data.setdefault('brand_sheets_outbox', {})
+            previous = dict(outbox[code]) if code in outbox else None
             try:
                 enqueue(context, review['fields'], user, code, review['region'],
                         kind='brand', approved=True)
@@ -141,6 +151,14 @@ async def on_review(update, context):
                 item['status'] = 'rejected'
             review['status'] = 'rejected'
         if not await checkpoint(context):
+            review['status'] = 'pending'
+            if action == 'approve':
+                if previous is None:
+                    outbox.pop(code, None)
+                else:
+                    outbox[code] = previous
+            elif item and item.get('status') == 'rejected':
+                item['status'] = 'pending'
             await query.answer('Qarorni saqlab bo‘lmadi. Administrator tekshirsin.', show_alert=True)
             return
         await query.answer('Tasdiqlandi.' if action == 'approve' else 'To‘g‘ri kelmadi.')
