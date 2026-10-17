@@ -29,7 +29,11 @@ def fields_from_rows(rows, source, width, height):
             pinfl = re.fullmatch(r'4\s*[dд][.)]?\s*([0-9]{14})', text, re.I)
             if pinfl:
                 add('pinfl', pinfl[1])
-            serial = re.fullmatch(r'5[.)]?\s*' + SERIAL, text)
+            # Strip the printed field number before applying SERIAL. Its
+            # left-boundary assertion otherwise rejects an intact "5AF..."
+            # reading because the series immediately follows the digit 5.
+            field_five = re.fullmatch(r'5[.)]?\s*(.+)', text)
+            serial = re.fullmatch(SERIAL, field_five[1].upper()) if field_five else None
             if serial:
                 add('license_number', serial[1])
             birth = re.fullmatch(r'3[.)]?\s*(.+?)\s*' + DATE, text)
@@ -44,6 +48,18 @@ def fields_from_rows(rows, source, width, height):
             if serial:
                 add('vehicle_registration', serial[1])
     if source == 'license_front':
+        # Some layouts put field 5 and its series in separate OCR boxes.
+        for anchor in (w for w in rows if w.confidence >= 90 and
+                       re.fullmatch(r'5[.)]?', w.text)):
+            for word in rows:
+                if (word.confidence < 90 or
+                        not 0 <= word.left - anchor.left - anchor.width < anchor.height * 4 or
+                        abs(word.top + word.height / 2 - anchor.top - anchor.height / 2)
+                        > max(anchor.height, word.height) * .5):
+                    continue
+                serial = re.fullmatch(SERIAL, word.text.strip().upper())
+                if serial:
+                    add('license_number', serial[1])
         # Some OCR layouts split the printed 4d label and number into two boxes.
         anchors = [w for w in rows if w.confidence >= 90 and
                    re.fullmatch(r'4\s*[dд][.)]?', w.text, re.I)]

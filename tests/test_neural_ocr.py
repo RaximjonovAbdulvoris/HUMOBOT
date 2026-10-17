@@ -14,6 +14,17 @@ def row(text, x=300, y=300, confidence=99, width=200, height=30):
 
 
 class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
+    def test_field_five_attached_or_separate_from_series(self):
+        attached = fields_from_rows([row('5AF1834658')], 'license_front', 960, 1280)
+        self.assertEqual(attached['license_number'], 'AF1834658')
+        separate = fields_from_rows([row('5', x=300, width=18),
+                                     row('AF1834658', x=325)], 'license_front', 960, 1280)
+        self.assertEqual(separate['license_number'], 'AF1834658')
+        off_line = fields_from_rows([row('5', x=300, y=100, width=18),
+                                     row('AF1834658', x=325, y=300)],
+                                    'license_front', 960, 1280)
+        self.assertIsNone(off_line['license_number'])
+
     def test_numbered_lines_without_spaces_and_expiry_anchor(self):
         values = fields_from_rows([row('4d12345678901234'), row('5.AB1234567'),
             row('4a.01.02.2020', y=200, width=150), row('4401.02.2030', x=500, y=200)],
