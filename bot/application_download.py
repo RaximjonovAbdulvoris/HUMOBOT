@@ -10,6 +10,19 @@ MAX_ARCHIVE_BYTES = 45_000_000
 MAX_PHOTO_BYTES = 8_000_000
 
 
+def folder_name(record):
+    values = (record.get('ocr_result') or {}).get('values') or {}
+    identity = ' '.join(str(values.get(field) or '') for field in ('surname', 'given_name')).strip()
+    if not identity:
+        identity = str(record.get('applicant_name') or '').strip()
+    # A ZIP entry must never contain path separators, dot segments, or a user
+    # supplied absolute path. Keep readable Uzbek/Cyrillic letters and spaces.
+    identity = re.sub(r'[^\w -]', '', identity, flags=re.UNICODE).strip(' ._-')[:70]
+    if not identity or identity.lower() in ('arizachi', 'foydalanuvchi'):
+        identity = re.sub(r'[^A-Za-z0-9_-]', '', record.get('code') or 'Ariza')[:40]
+    return identity or 'Ariza'
+
+
 async def send_archive(bot, record, chat_id, reply_to_message_id):
     albums = record.get('media_albums')
     if not isinstance(albums, list) or not albums:
@@ -26,6 +39,7 @@ async def send_archive(bot, record, chat_id, reply_to_message_id):
     if not items or len(items) > 30 or len({name for name, _ in items}) != len(items):
         raise ValueError('Ariza rasmlari ro‘yxati noto‘g‘ri.')
 
+    directory = folder_name(record)
     archive = BytesIO()
     total = 0
     with ZipFile(archive, 'w', compression=ZIP_STORED) as zipped:
@@ -37,7 +51,7 @@ async def send_archive(bot, record, chat_id, reply_to_message_id):
             total += len(contents)
             if len(contents) > MAX_PHOTO_BYTES or total > MAX_ARCHIVE_BYTES:
                 raise ValueError('Arizadagi rasmlar hajmi yuklab olish chegarasidan oshgan.')
-            zipped.writestr(name, contents)
+            zipped.writestr(f'{directory}/{name}', contents)
     if archive.tell() > MAX_ARCHIVE_BYTES:
         raise ValueError('ZIP hajmi Telegram chegarasidan oshgan.')
     archive.seek(0)
