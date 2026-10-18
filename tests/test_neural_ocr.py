@@ -14,6 +14,26 @@ def row(text, x=300, y=300, confidence=99, width=200, height=30):
 
 
 class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
+    def test_split_birth_label_and_dropped_date_punctuation(self):
+        values = fields_from_rows([
+            row('3.', x=430, y=265, width=30, height=23, confidence=89),
+            row('TESTCITY27.121985', x=459, y=255, width=260, height=37),
+            row('4b.0203.2032', x=645, y=283)], 'license_front', 1280, 720)
+        self.assertEqual(values['birth_place'], 'TESTCITY')
+        self.assertEqual(values['birth_date'], '27.12.1985')
+        self.assertEqual(values['license_expiry'], '02.03.2032')
+        values = fields_from_rows([row('4b.3102.2032')], 'license_front', 1280, 720)
+        self.assertIsNone(values['license_expiry'])
+
+    def test_name_label_box_can_overlap_text_without_including_patronymic(self):
+        from bot.neural_ocr_worker import licence_identity
+        words = [row('1', x=429, y=176, width=40, height=26),
+                 row('EXAMPLE', x=460, y=174, height=28),
+                 row('2', x=430, y=205, width=26, height=26),
+                 row('PERSON', x=460, y=203, height=28),
+                 row('PATRONYMIC', x=465, y=230, height=30)]
+        self.assertEqual(licence_identity(words), ('EXAMPLE', 'PERSON'))
+
     def test_field_five_attached_or_separate_from_series(self):
         attached = fields_from_rows([row('5AF1834658')], 'license_front', 960, 1280)
         self.assertEqual(attached['license_number'], 'AF1834658')
