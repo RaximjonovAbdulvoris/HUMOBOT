@@ -9,6 +9,10 @@ from PIL import Image, ImageOps, ImageFilter
 from bot.document_ocr import FIELDS, normalize, guard_identifiers
 from bot.fast_ocr import Word, DATE, SERIAL
 
+# OCR may omit punctuation between printed date digits. The document label
+# and calendar validation still determine what the eight digits mean.
+PRINTED_DATE = r'([0-9]{2})[ ./-]?([0-9]{2})[ ./-]?([0-9]{4})'
+
 
 def fields_from_rows(rows, source, width, height):
     values = {field: set() for field in FIELDS}
@@ -36,11 +40,11 @@ def fields_from_rows(rows, source, width, height):
             serial = re.fullmatch(SERIAL, field_five[1].upper()) if field_five else None
             if serial:
                 add('license_number', serial[1])
-            birth = re.fullmatch(r'3[.)]?\s*(.+?)\s*' + DATE, text)
+            birth = re.fullmatch(r'3[.)]?\s*(.+?)\s*' + PRINTED_DATE, text)
             if birth:
                 add('birth_date', '.'.join(birth.groups()[1:]))
                 add('birth_place', clean_place(birth[1]) or '')
-            expiry = re.search(r'4\s*[bвб][.)]?\s*' + DATE, text, re.I)
+            expiry = re.fullmatch(r'4\s*[bвб][.)]?\s*' + PRINTED_DATE, text, re.I)
             if expiry:
                 add('license_expiry', '.'.join(expiry.groups()))
         if source.startswith('tech_') and word.left >= .60 * width and word.top < .75 * height:
@@ -48,6 +52,21 @@ def fields_from_rows(rows, source, width, height):
             if serial:
                 add('vehicle_registration', serial[1])
     if source == 'license_front':
+        # The field 3 label and its place/date are often separate boxes.
+        for anchor in (w for w in rows if w.confidence >= 85 and
+                       re.fullmatch(r'3[.)]?', w.text.strip())):
+            matches = []
+            for word in rows:
+                if (word.confidence < 90 or word.left <= anchor.left or
+                        not -anchor.width * .5 <= word.left - anchor.left - anchor.width < anchor.height * 3 or
+                        abs(word.top + word.height / 2 - anchor.top - anchor.height / 2) > max(anchor.height, word.height) * .55):
+                    continue
+                match = re.fullmatch(r'(.+?)\s*' + PRINTED_DATE, word.text.strip())
+                if match and clean_place(match[1]):
+                    matches.append(match)
+            if len(matches) == 1:
+                add('birth_place', clean_place(matches[0][1]))
+                add('birth_date', '.'.join(matches[0].groups()[1:]))
         # Some layouts put field 5 and its series in separate OCR boxes.
         for anchor in (w for w in rows if w.confidence >= 90 and
                        re.fullmatch(r'5[.)]?', w.text)):
@@ -110,7 +129,7 @@ def licence_identity(words):
             if word.confidence < 85:
                 continue
             match = re.fullmatch(rf'{rank}[.)]?\s*(.*)', word.text.strip())
-            if match:
+            if match and (not match[1] or clean_name(match[1])):
                 result.append((word, clean_name(match[1]) if match[1] else None))
         return result
 
@@ -129,7 +148,8 @@ def licence_identity(words):
             return anchor, attached
         choices = [(word, clean_name(word.text)) for word in words
                    if word.confidence >= 90 and word is not anchor
-                   and 0 <= word.left - anchor.left - anchor.width < anchor.height * 2.5
+                   and word.left > anchor.left
+                   and -anchor.width * .5 <= word.left - anchor.left - anchor.width < anchor.height * 2.5
                    and abs(word.top + word.height / 2 - anchor.top - anchor.height / 2)
                    < max(word.height, anchor.height) * .55]
         choices = [(word, value) for word, value in choices if value]
