@@ -14,6 +14,15 @@ def row(text, x=300, y=300, confidence=99, width=200, height=30):
 
 
 class NeuralOCRTests(unittest.IsolatedAsyncioTestCase):
+    async def test_primary_cards_are_processed_before_secondary_view(self):
+        file = N(file_size=4, download_as_bytearray=AsyncMock(return_value=b'data'))
+        bot = N(get_file=AsyncMock(return_value=file))
+        with patch.object(neural, 'worker', AsyncMock(return_value=[])) as run:
+            await neural.extract_documents(bot, {
+                'tech_front': 'one', 'tech_back': 'two', 'license_front': 'three'})
+        self.assertEqual([item['source'] for item in run.await_args.args[0]],
+            ['license_front', 'tech_back', 'tech_front'])
+
     def test_split_birth_label_and_dropped_date_punctuation(self):
         values = fields_from_rows([
             row('3.', x=430, y=265, width=30, height=23, confidence=89),

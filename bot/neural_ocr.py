@@ -65,6 +65,8 @@ async def engine_info():
 
 async def extract_documents(bot, data):
     start = time.monotonic()
+    # Process the licence and registration before secondary views so their
+    # completed results survive when a later image reaches the time limit.
     order = ('license_front', 'tech_back', 'tech_front')
     selected = [source for source in order if data.get(source)]
     async def download(source):
