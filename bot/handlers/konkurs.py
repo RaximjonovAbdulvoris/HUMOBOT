@@ -1,7 +1,8 @@
 """Separate contest application; no other application route is reused."""
 import re
-from datetime import date, datetime
+from datetime import datetime
 from html import escape
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import CommandHandler, ConversationHandler, MessageHandler, filters
@@ -70,7 +71,7 @@ async def day(update: Update, context):
     value = (update.message.text or '').strip()
     try:
         entered = datetime.strptime(value, '%d.%m.%Y').date()
-        if entered.strftime('%d.%m.%Y') != value or entered > date.today():
+        if entered.strftime('%d.%m.%Y') != value or entered > datetime.now(ZoneInfo('Asia/Tashkent')).date():
             raise ValueError('date')
     except ValueError:
         await update.message.reply_text('Sanani KUN.OY.YIL shaklida to‘g‘ri yozing:')
@@ -92,7 +93,14 @@ async def day(update: Update, context):
             f'Sana: <code>{value}</code>')
     from bot.brand_review import review_keyboard, stage_review, status_text
     review = stage_review(context, data, code, 'konkurs', group, text, user.id, kind='konkurs')
+    # A timeout may mean Telegram accepted the post but its response was lost.
+    # Never send the same application again until an operator reconciles it.
+    if review.get('send_attempted'):
+        await update.message.reply_text('Bu ariza yuborishga berilgan. Takror yubormang; holatini operator tekshiradi.')
+        return DAY
+    review['send_attempted'] = True
     if not await checkpoint(context):
+        review.pop('send_attempted', None)
         await update.message.reply_text('Arizani saqlab bo‘lmadi. Keyinroq qayta urinib ko‘ring.')
         return DAY
     try:
@@ -100,7 +108,9 @@ async def day(update: Update, context):
                                                  parse_mode='HTML', reply_markup=review_keyboard(code))
         review['message_id'] = message.message_id
         review['displayed_status'] = 'pending'
-        await checkpoint(context)
+        if not await checkpoint(context):
+            await update.message.reply_text('Ariza guruhga yuborildi, lekin saqlash tasdiqlanmadi. Takror yubormang; operatorga murojaat qiling.')
+            return DAY
     except Exception:
         await update.message.reply_text('Yuborish natijasi noma’lum. Takror yubormasdan operatorga murojaat qiling.')
         return DAY

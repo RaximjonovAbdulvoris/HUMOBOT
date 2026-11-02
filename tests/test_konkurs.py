@@ -60,3 +60,15 @@ class KonkursTests(unittest.IsolatedAsyncioTestCase):
         message = N(text='0', reply_text=AsyncMock())
         self.assertEqual(await konkurs.orders(N(message=message), N(user_data={})), konkurs.ORDERS)
         message.reply_text.assert_awaited_once()
+
+    async def test_lost_telegram_response_does_not_duplicate_post(self):
+        data = dict(k_city='Toshkent', k_name='Test Driver', k_phone='998901234567', k_orders='42')
+        context = N(user_data=data, bot_data={}, application=None,
+                    bot=N(send_message=AsyncMock(side_effect=TimeoutError)))
+        update = N(message=N(text='01.01.2026', reply_text=AsyncMock()),
+                   effective_user=N(id=42, full_name='Test Driver'))
+        with patch.object(konkurs, 'destination', return_value='-5302408605'), \
+             patch.object(konkurs, 'application_code', return_value='HM-123456'):
+            await konkurs.day(update, context)
+            await konkurs.day(update, context)
+        context.bot.send_message.assert_awaited_once()
