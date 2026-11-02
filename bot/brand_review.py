@@ -19,7 +19,7 @@ def review_keyboard(code):
 
 
 def stage_review(context, data, code, region, group_id, text, applicant_id, kind='brand'):
-    if kind not in ('brand', 'spectre'):
+    if kind not in ('brand', 'spectre', 'konkurs'):
         raise ValueError('Unknown review kind')
     reviews = context.bot_data.setdefault('brand_reviews', {})
     review = reviews.setdefault(code, {
@@ -27,7 +27,8 @@ def stage_review(context, data, code, region, group_id, text, applicant_id, kind
         'message_id': None, 'text': text, 'status': 'pending',
         'applicant_id': applicant_id,
         'fields': {key: str(data.get(key, '')) for key in (
-            'b_name', 'b_phone', 'b_model', 'b_year', 'b_color', 'b_plate')},
+            ('k_city', 'k_name', 'k_phone', 'k_orders', 'k_date') if kind == 'konkurs'
+            else ('b_name', 'b_phone', 'b_model', 'b_year', 'b_color', 'b_plate'))},
     })
     if (review['group_id'] != str(group_id) or review['region'] != region
             or review.get('kind', 'brand') != kind):
@@ -87,10 +88,15 @@ async def notify_applicant(context, review):
             or not review.get('applicant_id')):
         return
     kind = review.get('kind', 'brand')
-    subject = 'Spectre Energy' if kind == 'spectre' else 'brendlash'
-    text = ('Arizangiz ko‘rib chiqildi. Afsuski, avtomobilingiz yoki yuborgan '
-            f'ma’lumotlaringiz {subject} talablariga mos kelmagani uchun arizangiz '
-            'tasdiqlanmadi.\n\nSavollar bo‘lsa, +998 78 113 80 81 raqamiga murojaat qiling.')
+    if kind == 'konkurs':
+        text = ('Konkurs arizangiz ko‘rib chiqildi. Afsuski, taqdim etilgan '
+                'ma’lumotlar konkurs shartlariga mos kelmagani uchun arizangiz '
+                'tasdiqlanmadi. Batafsil ma’lumot uchun operatorga murojaat qiling.')
+    else:
+        subject = 'Spectre Energy' if kind == 'spectre' else 'brendlash'
+        text = ('Arizangiz ko‘rib chiqildi. Afsuski, avtomobilingiz yoki yuborgan '
+                f'ma’lumotlaringiz {subject} talablariga mos kelmagani uchun arizangiz '
+                'tasdiqlanmadi.\n\nSavollar bo‘lsa, +998 78 113 80 81 raqamiga murojaat qiling.')
     try:
         await context.bot.send_message(chat_id=review['applicant_id'],
                                        text=f"Ariza {review['code']}\n\n{text}")

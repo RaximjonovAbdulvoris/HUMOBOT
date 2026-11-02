@@ -12,10 +12,11 @@ from bot.config import BOT_TOKEN
 from bot.premium_emoji import PremiumEmojiBot
 from bot.brand_cleanup import remove_legacy_brand_keyboards
 from bot.handlers.brand import build_brand_conversation
+from bot.handlers.konkurs import build_konkurs_conversation
 from bot.handlers.driver import build_driver_conversation
 from bot.handlers.operator import on_user_reply_message, register_operator_handlers, refresh_driver_keyboards
 from bot.handlers.start import (
-    MENU_BRAND, MENU_CONTACT, MENU_DRIVER, MENU_OFFICE, MENU_REGION, MENU_SPECTRE,
+    MENU_BRAND, MENU_CONTACT, MENU_DRIVER, MENU_OFFICE, MENU_REGION, MENU_SPECTRE, MENU_KONKURS,
     build_contact_handler, build_office_handler, build_region_handler, cancel,
     show_menu, start,
 )
@@ -28,7 +29,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE,
+MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE, MENU_KONKURS,
                 MENU_REGION, "📝 Ulanish uchun Ariza", "🚕 Ulanish uchun Ariza", "🎨 Brend Ariza",
                 "📞 Bog'lanish uchun", "📱 Bog'lanish uchun", "📍 Ofis manzili",
                 "⚡ Spectre Energyga ariza", "🔄 Hududni almashtirish"}
@@ -59,8 +60,10 @@ def build_application_conversation() -> ConversationHandler:
     """One state machine prevents driver and brand forms running concurrently."""
     driver = build_driver_conversation()
     brand = build_brand_conversation()
-    if set(driver.states) & set(brand.states):
-        raise ValueError("Driver and brand conversation states must not overlap")
+    konkurs = build_konkurs_conversation()
+    if (set(driver.states) & set(brand.states) or set(driver.states) & set(konkurs.states)
+            or set(brand.states) & set(konkurs.states)):
+        raise ValueError("Application conversation states must not overlap")
     navigation = [
         CommandHandler("start", start, filters.ChatType.PRIVATE),
         CommandHandler("cancel", cancel, filters.ChatType.PRIVATE),
@@ -69,9 +72,9 @@ def build_application_conversation() -> ConversationHandler:
         build_office_handler(),
     ]
     return ConversationHandler(
-        entry_points=navigation + driver.entry_points + brand.entry_points,
+        entry_points=navigation + driver.entry_points + brand.entry_points + konkurs.entry_points,
         name="application_form", persistent=True,
-        states={**driver.states, **brand.states},
+        states={**driver.states, **brand.states, **konkurs.states},
         fallbacks=navigation,
         allow_reentry=True,
     )

@@ -1,8 +1,70 @@
-// ONE standalone or bound Apps Script web app routes both workbooks.
-// Private Script properties: HUMO_SECRET, BRAND_SPREADSHEET_ID, SPECTRE_SPREADSHEET_ID.
+// ONE web app routes existing workbooks and a separate contest workbook.
+// Private Script properties: HUMO_SECRET, BRAND_SPREADSHEET_ID,
+// SPECTRE_SPREADSHEET_ID, KONKURS_SPREADSHEET_ID.
 const BRAND_HEADERS = ['Модель авто', 'Год выпуска', 'Цвет', 'ФИО водителя',
   'Номер авто', 'Контакт', 'Парк', 'Дата добавления', 'Комментарии от WB'];
 const SPECTRE_HEADERS = ['KUN/OY/YIL', 'ISM FAMILYA', 'TELEFON NO`MER', 'MOSHINA', 'DAVLAT RAQAMI'];
+const KONKURS_HEADERS = ['Ariza kodi', 'Shahar', 'Ism familiya', 'Telefon', 'Buyurtmalar soni', 'Sana'];
+function humoKonkurs(payload, props) {
+  const fields = payload.fields;
+  if (payload.region !== 'konkurs' || !/^HM-\d{6,}$/.test(payload.code) || !fields ||
+      ['city', 'name', 'phone', 'orders', 'date'].some(key => typeof fields[key] !== 'string') ||
+      !/^[\s\S]{2,80}$/.test(fields.city) || !/^[\s\S]{3,100}$/.test(fields.name) ||
+      !/^998\d{9}$/.test(fields.phone) || !/^[1-9]\d{0,6}$/.test(fields.orders) ||
+      !/^\d{2}\.\d{2}\.\d{4}$/.test(fields.date) ||
+      !/^\d{4}-\d{2}-\d{2}T/.test(payload.created_at)) return humoReply({ok: false});
+  const parts = fields.date.split('.').map(Number);
+  const day = new Date(Date.UTC(parts[2], parts[1] - 1, parts[0]));
+  if (day.getUTCFullYear() !== parts[2] || day.getUTCMonth() + 1 !== parts[1] ||
+      day.getUTCDate() !== parts[0]) return humoReply({ok: false});
+  const id = props.getProperty('KONKURS_SPREADSHEET_ID');
+  if (!id) return humoReply({ok: false});
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sheet = SpreadsheetApp.openById(id).getSheetByName('Лист1');
+    if (!sheet) return humoReply({ok: false});
+    const header = sheet.getRange(1, 1, 1, 6);
+    const currentHeaders = header.getDisplayValues()[0].map(value => value.trim());
+    if (currentHeaders.every(value => value === '') && sheet.getLastRow() === 0) {
+      header.setNumberFormat('@');
+      header.setValues([KONKURS_HEADERS]);
+      SpreadsheetApp.flush();
+    } else if (currentHeaders.some((value, i) => value !== KONKURS_HEADERS[i])) {
+      return humoReply({ok: false});
+    }
+    const marker = 'HUMOBOT:konkurs:konkurs:' + payload.code;
+    const fingerprint = humoHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+      JSON.stringify(payload), Utilities.Charset.UTF_8));
+    const notes = sheet.getRange(1, 1, sheet.getMaxRows(), 1).getNotes();
+    let existing = 0, edge = 0;
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i][0].startsWith('HUMOBOT:')) edge = i + 1;
+      if (notes[i][0].split('\n')[0] === marker) existing = i + 1;
+    }
+    if (existing) {
+      const saved = notes[existing - 1][0].split('\n');
+      if (saved[1] !== fingerprint) return humoReply({ok: false});
+      if (saved[2] === 'DONE') return humoReply({ok: true, code: payload.code, duplicate: true});
+      const current = sheet.getRange(existing, 1, 1, 6).getDisplayValues()[0];
+      const wanted = [payload.code, fields.city, fields.name, fields.phone, fields.orders, fields.date];
+      if (current.some((value, i) => value && value.replace(/^'/, '') !== wanted[i]))
+        return humoReply({ok: false});
+    }
+    const row = existing || Math.max(sheet.getLastRow(), edge, 1) + 1;
+    if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), row - sheet.getMaxRows());
+    const first = sheet.getRange(row, 1);
+    first.setNote(marker + '\n' + fingerprint + '\nPENDING');
+    SpreadsheetApp.flush();
+    const range = sheet.getRange(row, 1, 1, 6);
+    range.setNumberFormat('@');
+    range.setValues([[payload.code, humoText(fields.city), humoText(fields.name),
+      fields.phone, fields.orders, fields.date]]);
+    first.setNote(marker + '\n' + fingerprint + '\nDONE');
+    SpreadsheetApp.flush();
+    return humoReply({ok: true, code: payload.code, tab: 'Лист1'});
+  } finally { lock.releaseLock(); }
+}
 function humoReply(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -37,6 +99,7 @@ function doPost(e) {
       diff |= signature.charCodeAt(i) ^ (request.signature.charCodeAt(i) || 0);
     if (diff !== 0) return humoReply({ok: false});
     const payload = JSON.parse(Utilities.newBlob(Utilities.base64Decode(request.payload)).getDataAsString('UTF-8'));
+    if (payload.kind === 'konkurs') return humoKonkurs(payload, props);
     const fields = payload.fields;
     if (!/^HM-\d{6,}$/.test(payload.code) || !fields ||
         ['name', 'phone', 'model', 'year', 'color', 'plate'].some(key =>

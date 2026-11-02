@@ -21,6 +21,7 @@ MENU_CONTACT = "Bog'lanish uchun"
 MENU_OFFICE = "Ofis manzili"
 MENU_SPECTRE = "Spectre Energyga ariza"
 MENU_REGION = "Hududni almashtirish"
+MENU_KONKURS = "Konkurs🎁"
 OFFICE_PHOTO = Path(__file__).resolve().parents[1] / "templates" / "office.png"
 TASHKENT_OFFICE_PHOTO = OFFICE_PHOTO.with_name("office_tashkent.png")
 OFFICE_CAPTION = (
@@ -50,6 +51,7 @@ def main_keyboard(region: str) -> ReplyKeyboardMarkup:
             [menu_button(MENU_CONTACT, icon="CONTACT", emoji="📞"),
              menu_button(MENU_OFFICE, icon="LOCATION", emoji="📍")],
             [menu_button(MENU_REGION, icon="REGION", emoji="🔄")]]
+    rows.insert(2, [MENU_KONKURS])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -104,6 +106,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"{premium_markup('DRIVER', '🚕')} <b>Ulanish uchun ariza</b> — haydovchi sifatida ro‘yxatdan o‘tish.\n"
         f"{premium_markup('BRAND', '🎨')} <b>Brend ariza</b> — avtomobilni brendlash uchun murojaat.\n"
         f"{premium_markup('SPECTRE', '⚡')} <b>Spectre Energyga ariza</b> — avtomobil ma’lumotlarini yuborish.\n"
+        "🎁 <b>Konkurs</b> — bajarilgan buyurtmalar bilan qatnashish.\n"
         "📞 Aloqa ma’lumotlari va 📍 ofis manzili ham quyidagi menyuda."
     )
     await update.effective_message.reply_text(

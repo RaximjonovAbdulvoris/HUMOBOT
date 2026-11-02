@@ -19,7 +19,7 @@ NAMANGAN_KEYS = {
 
 QUEUE_KEYS = {prefix + key for prefix in ("", "TASHKENT_", "NAMANGAN_")
               for key in ("INCOMPLETE_GROUP", "OTHER_PARK_GROUP")}
-ROUTE_KEYS = {*TASHKENT_KEYS.values(), *NAMANGAN_KEYS.values(), *QUEUE_KEYS}
+ROUTE_KEYS = {*TASHKENT_KEYS.values(), *NAMANGAN_KEYS.values(), *QUEUE_KEYS, 'KONKURS_GROUP'}
 
 
 def settings_path() -> Path:
