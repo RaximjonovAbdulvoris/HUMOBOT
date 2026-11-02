@@ -4,7 +4,7 @@ from datetime import datetime
 from html import escape
 from zoneinfo import ZoneInfo
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import CommandHandler, ConversationHandler, MessageHandler, filters
 
 from bot.application_ids import application_code
@@ -14,6 +14,11 @@ from bot.route_settings import destination
 from bot.queue_moves import checkpoint
 
 CITY, NAME, PHONE, ORDERS, DAY = range(300, 305)
+CITY_CHOICES = ('Toshkent', 'Namangan')
+ORDER_CHOICES = tuple(str(number) for number in range(100, 1001, 100))
+CITY_KEYBOARD = ReplyKeyboardMarkup([list(CITY_CHOICES)], resize_keyboard=True, one_time_keyboard=True)
+ORDER_KEYBOARD = ReplyKeyboardMarkup([list(ORDER_CHOICES[i:i + 2]) for i in range(0, 10, 2)],
+                                     resize_keyboard=True, one_time_keyboard=True)
 
 
 async def begin(update: Update, context):
@@ -21,17 +26,17 @@ async def begin(update: Update, context):
     if not destination('KONKURS_GROUP'):
         await update.message.reply_text('Konkurs arizalari hozircha qabul qilinmayapti.')
         return ConversationHandler.END
-    await update.message.reply_text('🎁 Konkurs uchun qaysi shahardansiz? Shahar nomini yozing:')
+    await update.message.reply_text('🎁 Konkurs uchun shahringizni tanlang:', reply_markup=CITY_KEYBOARD)
     return CITY
 
 
 async def city(update: Update, context):
     value = (update.message.text or '').strip()
-    if not re.fullmatch(r"[\w\s‘’'ʼ-]{2,80}", value, flags=re.UNICODE):
-        await update.message.reply_text('Shahar nomini to‘liq yozing:')
+    if value not in CITY_CHOICES:
+        await update.message.reply_text('Quyidagi tugmalardan shahringizni tanlang:', reply_markup=CITY_KEYBOARD)
         return CITY
     context.user_data['k_city'] = value
-    await update.message.reply_text('Ism va familiyangizni yozing:')
+    await update.message.reply_text('Ism va familiyangizni yozing:', reply_markup=ReplyKeyboardRemove())
     return NAME
 
 
@@ -53,17 +58,17 @@ async def phone(update: Update, context):
         await update.message.reply_text('Telefon raqamini 998 bilan boshlanadigan 12 ta raqamda yozing:')
         return PHONE
     context.user_data['k_phone'] = digits
-    await update.message.reply_text('Nechta buyurtma bajargansiz? Faqat son yozing:')
+    await update.message.reply_text('Nechta buyurtma bajargansiz? Quyidagi tugmalardan tanlang:', reply_markup=ORDER_KEYBOARD)
     return ORDERS
 
 
 async def orders(update: Update, context):
     value = (update.message.text or '').strip()
-    if not re.fullmatch(r'\d{1,7}', value) or int(value) < 1:
-        await update.message.reply_text('Bajarilgan buyurtmalar sonini musbat raqamda yozing:')
+    if value not in ORDER_CHOICES:
+        await update.message.reply_text('Buyurtmalar sonini quyidagi tugmalardan tanlang:', reply_markup=ORDER_KEYBOARD)
         return ORDERS
     context.user_data['k_orders'] = str(int(value))
-    await update.message.reply_text('Qaysi sanada? KUN.OY.YIL shaklida yozing (masalan: 02.11.2026):')
+    await update.message.reply_text('Qaysi sanada? KUN.OY.YIL shaklida yozing (masalan: 02.11.2026):', reply_markup=ReplyKeyboardRemove())
     return DAY
 
 

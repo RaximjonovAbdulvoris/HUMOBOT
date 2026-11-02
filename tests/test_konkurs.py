@@ -14,6 +14,26 @@ from bot.handlers import konkurs
 
 
 class KonkursTests(unittest.IsolatedAsyncioTestCase):
+    async def test_city_and_order_buttons_only_accept_offered_values(self):
+        context = N(user_data={})
+        message = N(text='Fargona', reply_text=AsyncMock())
+        self.assertEqual(await konkurs.city(N(message=message), context), konkurs.CITY)
+        for city in konkurs.CITY_CHOICES:
+            message.text = city
+            self.assertEqual(await konkurs.city(N(message=message), context), konkurs.NAME)
+            self.assertEqual(context.user_data['k_city'], city)
+        message.text = '150'
+        self.assertEqual(await konkurs.orders(N(message=message), context), konkurs.ORDERS)
+        for number in konkurs.ORDER_CHOICES:
+            message.text = number
+            self.assertEqual(await konkurs.orders(N(message=message), context), konkurs.DAY)
+            self.assertEqual(context.user_data['k_orders'], number)
+
+    def test_contest_menu_immediately_follows_driver(self):
+        from bot.handlers.start import main_keyboard, MENU_KONKURS
+        keyboard = main_keyboard('tashkent').keyboard
+        self.assertEqual(keyboard[1][0].text, MENU_KONKURS)
+
     def test_entry_accepts_premium_cleaned_and_original_button(self):
         from bot.premium_emoji import _button_text
         handler = konkurs.build_konkurs_conversation().entry_points[0]

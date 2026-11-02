@@ -51,7 +51,7 @@ def main_keyboard(region: str) -> ReplyKeyboardMarkup:
             [menu_button(MENU_CONTACT, icon="CONTACT", emoji="📞"),
              menu_button(MENU_OFFICE, icon="LOCATION", emoji="📍")],
             [menu_button(MENU_REGION, icon="REGION", emoji="🔄")]]
-    rows.insert(2, [MENU_KONKURS])
+    rows.insert(1, [MENU_KONKURS])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
