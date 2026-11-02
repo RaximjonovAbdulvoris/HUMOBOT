@@ -29,7 +29,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE, MENU_KONKURS,
+MENU_ACTIONS = {MENU_DRIVER, MENU_BRAND, MENU_CONTACT, MENU_OFFICE, MENU_SPECTRE, MENU_KONKURS, 'Konkurs',
                 MENU_REGION, "📝 Ulanish uchun Ariza", "🚕 Ulanish uchun Ariza", "🎨 Brend Ariza",
                 "📞 Bog'lanish uchun", "📱 Bog'lanish uchun", "📍 Ofis manzili",
                 "⚡ Spectre Energyga ariza", "🔄 Hududni almashtirish"}

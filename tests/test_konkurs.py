@@ -14,6 +14,15 @@ from bot.handlers import konkurs
 
 
 class KonkursTests(unittest.IsolatedAsyncioTestCase):
+    def test_entry_accepts_premium_cleaned_and_original_button(self):
+        from bot.premium_emoji import _button_text
+        handler = konkurs.build_konkurs_conversation().entry_points[0]
+        for label in (konkurs.MENU_KONKURS, _button_text(konkurs.MENU_KONKURS)):
+            from telegram import Update
+            update = Update.de_json({'update_id': 1, 'message': {'message_id': 1,
+                'date': 0, 'chat': {'id': 42, 'type': 'private'}, 'text': label}}, None)
+            self.assertTrue(handler.filters.check_update(update))
+
     async def test_admin_approval_enqueues_only_contest_fields(self):
         data = {'k_city': 'Farg‘ona', 'k_name': 'Ali Valiyev',
                 'k_phone': '998901234567', 'k_orders': '42', 'k_date': '01.11.2026'}

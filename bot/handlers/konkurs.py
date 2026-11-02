@@ -121,7 +121,7 @@ async def day(update: Update, context):
 
 def build_konkurs_conversation():
     return ConversationHandler(
-        entry_points=[MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r'^Konkurs🎁$'), begin)],
+        entry_points=[MessageHandler(filters.ChatType.PRIVATE & filters.Regex(r'^Konkurs(?:🎁)?$'), begin)],
         states={CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, city)],
                 NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
                 PHONE: [MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), phone)],
