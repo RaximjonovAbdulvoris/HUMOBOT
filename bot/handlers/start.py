@@ -31,7 +31,7 @@ OFFICE_CAPTION = (
     "👇 Manzilni ko‘rish uchun «Xaritada ochish» tugmasini bosing."
 )
 OFFICE_KEYBOARD = InlineKeyboardMarkup([
-    [InlineKeyboardButton("📍 Xaritada ochish", url="https://yandex.ru/maps/-/CTtEuSZe")],
+    [InlineKeyboardButton("📍 Xaritada ochish", url="https://yandex.uz/maps/-/CXr6qTy1")],
 ])
 TASHKENT_OFFICE_TEXT = (
     "📍 <b>Toshkent shahri — ofis manzili</b>\n\n"
