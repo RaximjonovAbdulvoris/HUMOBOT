@@ -39,10 +39,11 @@ const spectre = sheet([
   [1, '', 'EXAMPLE', '998000000000', 'EXAMPLE', '01A000AA'],
   ['', '', '', '', '', '', '', 'Rang', 'Tavsif']
 ]);
+const konkurs = sheet([]);
 const context = {
   ContentService: {MimeType: {JSON: 'application/json'}, createTextOutput: text => ({setMimeType: () => JSON.parse(text)})},
   PropertiesService: {getScriptProperties: () => ({getProperty: key => ({HUMO_SECRET: secret,
-    BRAND_SPREADSHEET_ID: 'brand-book', SPECTRE_SPREADSHEET_ID: 'spectre-book'})[key]})},
+    BRAND_SPREADSHEET_ID: 'brand-book', SPECTRE_SPREADSHEET_ID: 'spectre-book', KONKURS_SPREADSHEET_ID: 'contest-book'})[key]})},
   Utilities: {Charset: {UTF_8: 'utf8'}, DigestAlgorithm: {SHA_256: 'sha256'},
     computeHmacSha256Signature: (value, key) => [...crypto.createHmac('sha256', key).update(value).digest()],
     computeDigest: (algorithm, value) => [...crypto.createHash('sha256').update(value).digest()],
@@ -50,7 +51,8 @@ const context = {
   LockService: {getScriptLock: () => ({waitLock: () => {}, releaseLock: () => {}})},
   SpreadsheetApp: {CopyPasteType: {PASTE_FORMAT: 'format'}, openById: id => ({getSheetByName: tab =>
     id === 'brand-book' ? ({'Ташкент': tashkent, 'Наманган': namangan})[tab]
-      : id === 'spectre-book' && tab === 'Лист1' ? spectre : null}), flush: () => {}}
+      : id === 'spectre-book' && tab === 'Лист1' ? spectre
+      : id === 'contest-book' && tab === 'Лист1' ? konkurs : null}), flush: () => {}}
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('integrations/brand_sheets.gs', 'utf8'), context);
@@ -97,3 +99,27 @@ assert.equal(context.doPost(request('HM-000006')).duplicate, true);
 tashkent.rows[1][0] = 'Changed existing header';
 assert.equal(context.doPost(request('HM-000007')).ok, false);
 console.log('Receiver passed: regional routes, Spectre columns/counter, preserved comments/legend, signatures, duplicate/recovery checks.');
+function contestRequest(code, city, overrides = {}) {
+  const fields = {city, name: '=TEST DRIVER', phone: '998901234567', orders: '42', date: '01.11.2026', ...overrides};
+  const payload = Buffer.from(JSON.stringify({code, kind: 'konkurs', region: 'konkurs', created_at: '2026-11-02T10:00:00+05:00', fields})).toString('base64');
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = crypto.createHmac('sha256', secret).update(timestamp + '.' + payload).digest('hex');
+  const contents = JSON.stringify({timestamp, payload, signature});
+  return {postData: {contents, length: contents.length}};
+}
+assert.equal(context.doPost(contestRequest('HM-100001', 'Toshkent')).ok, true);
+assert.deepEqual(konkurs.rows[0], ['Ariza kodi', 'Shahar', 'Ism familiya', 'Telefon', 'Buyurtmalar soni', 'Sana']);
+assert.equal(konkurs.rows[1][1], 'Toshkent');
+assert.equal(konkurs.rows[1][2], "'=TEST DRIVER");
+assert.equal(context.doPost(contestRequest('HM-100001', 'Toshkent')).duplicate, true);
+assert.equal(context.doPost(contestRequest('HM-100002', 'Namangan')).ok, true);
+assert.equal(konkurs.rows[2][1], 'Namangan');
+assert.equal(konkurs.rows.length, 3);
+assert.equal(context.doPost(contestRequest('HM-100003', 'Namangan', {date: '31.02.2026'})).ok, false);
+assert.equal(context.doPost(contestRequest('HM-100003', 'Namangan', {orders: '0'})).ok, false);
+failAfterValues = true;
+assert.equal(context.doPost(contestRequest('HM-100004', 'Fargona')).ok, false);
+const contestCount = konkurs.rows.length;
+assert.equal(context.doPost(contestRequest('HM-100004', 'Fargona')).ok, true);
+assert.equal(konkurs.rows.length, contestCount);
+console.log('Contest receiver passed: shared city worksheet, validation, formula escaping, idempotency and lost-response recovery.');

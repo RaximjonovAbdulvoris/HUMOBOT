@@ -47,19 +47,23 @@ def normalize_payload(payload):
 
 
 def enqueue(context, data, user, code, region, kind='brand', approved=False):
-    if kind not in ('brand', 'spectre'):
+    if kind not in ('brand', 'spectre', 'konkurs'):
         raise ValueError('Unknown export kind')
     if not approved:
         raise ValueError('Export requires operator approval')
     outbox = context.bot_data.setdefault('brand_sheets_outbox', {})
     if code in outbox and outbox[code].get('payload', {}).get('kind') != kind:
         raise ValueError('Export kind changed')
+    fields = ({target: str(data.get(source, '')) for target, source in (
+        ('city', 'k_city'), ('name', 'k_name'), ('phone', 'k_phone'),
+        ('orders', 'k_orders'), ('date', 'k_date'))} if kind == 'konkurs' else
+        {target: str(data.get(source, '')) for target, source in (
+        ('name', 'b_name'), ('phone', 'b_phone'), ('model', 'b_model'),
+        ('year', 'b_year'), ('color', 'b_color'), ('plate', 'b_plate'))})
     item = outbox.setdefault(code, {'status': 'pending', 'payload': {
-        'code': code, 'kind': kind, 'region': region_key(region),
+        'code': code, 'kind': kind, 'region': 'konkurs' if kind == 'konkurs' else region_key(region),
         'created_at': datetime.now(ZoneInfo('Asia/Tashkent')).isoformat(timespec='seconds'),
-        'fields': {target: str(data.get(source, '')) for target, source in (
-            ('name', 'b_name'), ('phone', 'b_phone'), ('model', 'b_model'),
-            ('year', 'b_year'), ('color', 'b_color'), ('plate', 'b_plate'))},
+        'fields': fields,
     }})
     if item.get('status') == 'pending':
         item['approved'] = True
@@ -112,7 +116,7 @@ async def flush(context):
                     payload = normalize_payload(item['payload'])
                     # Legacy Spectre entries were queued without operator review.
                     # No application may enter Sheets without an approved post.
-                    if payload['kind'] not in ('brand', 'spectre') or not item.get('approved'):
+                    if payload['kind'] not in ('brand', 'spectre', 'konkurs') or not item.get('approved'):
                         continue
                     review = context.bot_data.get('brand_reviews', {}).get(code)
                     if review and review.get('kind', 'brand') == payload['kind']:
