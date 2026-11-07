@@ -15,9 +15,9 @@ from bot.queue_moves import checkpoint
 
 CITY, NAME, PHONE, ORDERS, DAY = range(300, 305)
 CITY_CHOICES = ('Toshkent', 'Namangan')
-ORDER_CHOICES = tuple(str(number) for number in range(100, 1001, 100))
+ORDER_CHOICES = ('100',)
 CITY_KEYBOARD = ReplyKeyboardMarkup([list(CITY_CHOICES)], resize_keyboard=True, one_time_keyboard=True)
-ORDER_KEYBOARD = ReplyKeyboardMarkup([list(ORDER_CHOICES[i:i + 2]) for i in range(0, 10, 2)],
+ORDER_KEYBOARD = ReplyKeyboardMarkup([list(ORDER_CHOICES)],
                                      resize_keyboard=True, one_time_keyboard=True)
 
 
